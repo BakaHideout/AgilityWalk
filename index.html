@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>Agility Walk</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#173B36">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agility Walk">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --sky-top:#6FBFEF;
+  --sky-horizon:#DFF3FF;
+  --forest:#173B36;
+  --forest-2:#0F2B27;
+  --gold:#F0B23E;
+  --gold-2:#D6941F;
+  --coral:#EF7F6B;
+  --mint:#63C9A4;
+  --ink:#0E211D;
+  --paper:#FBF6EC;
+  --line:rgba(255,255,255,0.14);
+  --danger:#E5555A;
+  font-family:'Inter',sans-serif;
+}
+:root:not([data-theme="light"]){ }
+@media (prefers-color-scheme: light){ }
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--forest-2);color:var(--paper);}
+body{display:flex;flex-direction:column;}
+.font-display{font-family:'Fredoka',sans-serif;}
+button{font-family:inherit;cursor:pointer;}
+input,select{font-family:inherit;}
+
+/* ---------- App shell ---------- */
+#app{position:relative;width:100%;height:100%;height:100dvh;overflow:hidden;background:var(--forest-2);}
+.screen{position:absolute;inset:0;display:none;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* ---------- Auth / signup ---------- */
+#authScreen{
+  align-items:center;justify-content:flex-start;overflow-y:auto;
+  background:radial-gradient(circle at 50% -10%, #2A5850 0%, #12302B 55%, #0C231F 100%);
+  padding:36px 20px 40px;
+}
+.auth-card{width:100%;max-width:420px;margin:0 auto;}
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
+.brand-mark{width:44px;height:44px;border-radius:14px;background:linear-gradient(155deg,var(--gold),var(--gold-2));display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 6px 16px rgba(0,0,0,0.35);}
+.brand h1{font-family:'Fredoka',sans-serif;font-size:26px;margin:0;letter-spacing:0.3px;}
+.brand-tag{text-align:center;color:#BEDAD2;font-size:13.5px;margin-bottom:26px;}
+.step-dots{display:flex;justify-content:center;gap:6px;margin-bottom:22px;}
+.step-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.18);transition:background .25s;}
+.step-dots span.on{background:var(--gold);}
+
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;color:#AFCFC6;margin-bottom:6px;font-weight:600;}
+.field input, .field select{
+  width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.06);color:var(--paper);font-size:15px;outline:none;
+}
+.field input:focus, .field select:focus{border-color:var(--gold);background:rgba(255,255,255,0.1);}
+.field-row{display:flex;gap:10px;}
+.field-row .field{flex:1;}
+.unit-toggle{display:flex;gap:6px;margin-top:6px;}
+.unit-toggle button{flex:1;padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.14);background:transparent;color:#BEDAD2;font-size:12px;font-weight:600;}
+.unit-toggle button.on{background:var(--gold);border-color:var(--gold);color:#20160A;}
+
+.gender-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px;}
+.gender-card{border:2px solid rgba(255,255,255,0.12);border-radius:16px;padding:16px 10px;text-align:center;background:rgba(255,255,255,0.05);}
+.gender-card.sel{border-color:var(--gold);background:rgba(240,178,62,0.14);}
+.gender-emoji{font-size:34px;margin-bottom:6px;}
+.gender-card div.label{font-weight:700;font-size:14px;}
+
+.btn-primary{
+  width:100%;padding:15px;border-radius:14px;border:none;
+  background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#241905;font-weight:700;font-size:15.5px;
+  box-shadow:0 8px 18px rgba(240,178,62,0.28);margin-top:6px;
+}
+.btn-primary:disabled{opacity:0.45;box-shadow:none;}
+.btn-ghost{width:100%;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,0.16);background:transparent;color:#DDEEE8;font-weight:600;font-size:14px;margin-top:10px;}
+.err-text{color:var(--danger);font-size:12.5px;margin-top:-6px;margin-bottom:10px;min-height:14px;}
+
+/* ---------- Main game ---------- */
+#gameScreen{position:absolute;inset:0;}
+#canvasWrap{position:absolute;inset:0;}
+canvas{display:block;width:100%;height:100%;}
+
+.topbar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:calc(10px + env(safe-area-inset-top)) 14px 0;pointer-events:none;z-index:5;}
+.stat-chip{pointer-events:auto;background:rgba(15,35,31,0.72);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:8px 12px;display:flex;flex-direction:column;align-items:center;min-width:64px;}
+.stat-chip .v{font-family:'Fredoka',sans-serif;font-size:16px;line-height:1.1;}
+.stat-chip .l{font-size:9.5px;color:#B9D6CC;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;}
+.chip-row{display:flex;gap:8px;}
+.cam-btn{pointer-events:auto;width:40px;height:40px;border-radius:12px;background:rgba(15,35,31,0.72);border:1px solid rgba(255,255,255,0.14);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;}
+.gps-dot{position:absolute;top:calc(64px + env(safe-area-inset-top));left:14px;display:flex;align-items:center;gap:6px;font-size:11px;color:#BEDAD2;background:rgba(15,35,31,0.6);padding:5px 10px;border-radius:20px;z-index:5;}
+.gps-dot .d{width:7px;height:7px;border-radius:50%;background:#5B6963;}
+.gps-dot .d.ok{background:#57D08A;box-shadow:0 0 6px #57D08A;}
+.gps-dot .d.bad{background:var(--danger);}
+
+.startzone{position:absolute;bottom:calc(84px + env(safe-area-inset-bottom));left:0;right:0;display:flex;justify-content:center;z-index:5;}
+#startBtn{
+  width:96px;height:96px;border-radius:50%;border:5px solid rgba(255,255,255,0.85);
+  background:radial-gradient(circle at 35% 30%, #6FE0AE, #2FAE79);color:#0B231A;font-family:'Fredoka',sans-serif;
+  font-size:16px;font-weight:700;box-shadow:0 10px 24px rgba(0,0,0,0.4);
+}
+#startBtn.walking{background:radial-gradient(circle at 35% 30%, #FF9E8F, var(--danger));color:#2A0908;}
+
+.walk-toast{position:absolute;bottom:calc(196px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:rgba(15,35,31,0.85);border:1px solid rgba(255,255,255,0.14);padding:8px 14px;border-radius:20px;font-size:12.5px;color:#F6E7C8;z-index:5;text-align:center;max-width:82%;}
+
+/* bottom tab bar */
+.tabbar{position:absolute;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--forest);border-top:1px solid rgba(255,255,255,0.08);padding:8px 4px calc(8px + env(safe-area-inset-bottom));}
+.tab-btn{flex:1;background:none;border:none;color:#7FA69B;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:10px;}
+.tab-btn .ic{font-size:19px;}
+.tab-btn .lb{font-size:10px;font-weight:600;}
+.tab-btn.active{color:var(--gold);}
+
+/* panels (profile/leaderboard/chat/friends) slide over game */
+.panel{position:absolute;inset:0;bottom:64px;background:var(--forest-2);display:none;flex-direction:column;z-index:8;}
+.panel.active{display:flex;}
+.panel-head{padding:calc(16px + env(safe-area-inset-top)) 18px 12px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.panel-head h2{font-family:'Fredoka',sans-serif;margin:0;font-size:20px;}
+.panel-body{flex:1;overflow-y:auto;padding:16px 18px 24px;}
+
+/* Profile */
+.profile-avatar-badge{width:64px;height:64px;border-radius:20px;background:linear-gradient(155deg,var(--mint),#2C8F72);display:flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:10px;}
+.pf-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.07);}
+.pf-row .k{color:#9FC3B9;font-size:13px;}
+.pf-row .v{font-weight:700;font-size:14.5px;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 18px;}
+.stat-box{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:12px 14px;}
+.stat-box .v{font-family:'Fredoka',sans-serif;font-size:20px;}
+.stat-box .l{font-size:11px;color:#9FC3B9;margin-top:2px;}
+.rank-banner{border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;}
+.rank-icon{font-size:30px;}
+
+/* Leaderboard */
+.lb-toggle{display:flex;gap:8px;margin-bottom:14px;}
+.lb-toggle button{flex:1;padding:9px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#BEDAD2;font-weight:600;font-size:13px;}
+.lb-toggle button.on{background:var(--gold);color:#241905;border-color:var(--gold);}
+.season-strip{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.05);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#CFE8DF;}
+.lb-row{display:flex;align-items:center;gap:10px;padding:10px 6px;border-radius:12px;}
+.lb-row.me{background:rgba(240,178,62,0.12);}
+.lb-rank-num{width:24px;text-align:center;font-weight:700;font-size:13px;color:#9FC3B9;}
+.lb-avatar{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.lb-name-wrap{flex:1;min-width:0;}
+.lb-name{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lb-sub{font-size:11px;color:#9FC3B9;}
+.lb-glow{text-shadow:0 0 8px #FF5555, 0 0 2px #FF9A9A;color:#FFD9D9 !important;}
+.lb-glow-ring{box-shadow:0 0 0 2px #FF5555, 0 0 10px 2px rgba(255,85,85,0.6);}
+.top10-badge{background:var(--danger);color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:8px;margin-left:6px;}
+.lb-val{font-weight:700;font-size:13.5px;}
+
+/* Chat */
+#chatLog{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.msg{max-width:80%;padding:9px 12px;border-radius:14px;font-size:13.5px;line-height:1.35;}
+.msg.me{align-self:flex-end;background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#241905;border-bottom-right-radius:4px;}
+.msg.other{align-self:flex-start;background:rgba(255,255,255,0.08);border-bottom-left-radius:4px;}
+.msg .who{font-size:10.5px;opacity:0.75;margin-bottom:2px;font-weight:700;}
+.chat-input-row{display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid rgba(255,255,255,0.08);}
+.chat-input-row input{flex:1;padding:11px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;outline:none;}
+.chat-send{width:42px;height:42px;border-radius:50%;border:none;background:var(--gold);color:#241905;font-size:16px;flex-shrink:0;}
+
+/* Friends */
+.friend-add-row{display:flex;gap:8px;margin-bottom:16px;}
+.friend-add-row input{flex:1;padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;outline:none;}
+.friend-add-row button{padding:0 16px;border-radius:12px;border:none;background:var(--gold);color:#241905;font-weight:700;}
+.friend-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.friend-row .fn{flex:1;font-weight:600;font-size:14px;}
+.friend-row .fs{font-size:11.5px;color:#9FC3B9;}
+.empty-note{color:#7FA69B;font-size:13px;text-align:center;padding:30px 10px;}
+.local-badge{display:inline-block;font-size:10px;background:rgba(255,255,255,0.08);color:#9FC3B9;padding:3px 8px;border-radius:8px;margin-bottom:12px;}
+
+.close-x{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.08);border:none;color:#fff;font-size:15px;z-index:2;}
+
+.hidden{display:none !important;}
+::-webkit-scrollbar{width:0;height:0;}
+
+#updateBanner{
+  position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));z-index:999;
+  background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#241905;border-radius:14px;
+  padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  box-shadow:0 10px 26px rgba(0,0,0,0.4);font-weight:600;font-size:13.5px;
+  animation:slideDown .35s ease-out;
+}
+@keyframes slideDown{ from{transform:translateY(-140%); opacity:0;} to{transform:translateY(0); opacity:1;} }
+#updateBanner button{
+  background:#241905;color:#F0B23E;border:none;border-radius:10px;padding:8px 14px;font-weight:700;font-size:13px;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="updateBanner" class="hidden">
+    <span>🔄 A new version of Agility Walk is ready</span>
+    <button id="updateBtn">Update</button>
+  </div>
+
+  <!-- ============ AUTH / SIGNUP ============ -->
+  <div class="screen active" id="authScreen">
+    <div class="auth-card">
+      <div class="brand"><div class="brand-mark">🥾</div><h1>Agility Walk</h1></div>
+      <div class="brand-tag">Turn every real step into a journey.</div>
+      <div class="step-dots"><span class="on" data-d="0"></span><span data-d="1"></span><span data-d="2"></span></div>
+
+      <!-- step 0: account -->
+      <div id="authStep0">
+        <div class="field"><label>Username</label><input id="inUsername" maxlength="18" placeholder="TrailBlazer42"></div>
+        <div class="field"><label>Email</label><input id="inEmail" type="email" placeholder="you@example.com"></div>
+        <div class="field-row">
+          <div class="field"><label>Age</label><input id="inAge" type="number" min="13" max="99" placeholder="27"></div>
+        </div>
+        <div class="err-text" id="err0"></div>
+        <button class="btn-primary" id="toStep1">Continue</button>
+      </div>
+
+      <!-- step 1: gender/character -->
+      <div id="authStep1" class="hidden">
+        <label style="display:block;font-size:12.5px;color:#AFCFC6;margin-bottom:10px;font-weight:600;">Choose your character</label>
+        <div class="gender-grid">
+          <div class="gender-card" id="genderMale" data-g="male"><div class="gender-emoji">🚹</div><div class="label">Male</div></div>
+          <div class="gender-card" id="genderFemale" data-g="female"><div class="gender-emoji">🚺</div><div class="label">Female</div></div>
+        </div>
+        <div class="err-text" id="err1"></div>
+        <button class="btn-primary" id="toStep2">Continue</button>
+        <button class="btn-ghost" id="back0">Back</button>
+      </div>
+
+      <!-- step 2: body stats -->
+      <div id="authStep2" class="hidden">
+        <div class="field">
+          <label>Units</label>
+          <div class="unit-toggle">
+            <button class="on" id="unitMetric" data-u="metric">Metric (kg / cm)</button>
+            <button id="unitImperial" data-u="imperial">Imperial (lb / in)</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label id="weightLabel">Weight (kg)</label><input id="inWeight" type="number" placeholder="70"></div>
+          <div class="field"><label id="heightLabel">Height (cm)</label><input id="inHeight" type="number" placeholder="175"></div>
+        </div>
+        <div class="err-text" id="err2"></div>
+        <button class="btn-primary" id="finishSignup">Start Walking</button>
+        <button class="btn-ghost" id="back1">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GAME SCREEN ============ -->
+  <div class="screen" id="gameScreen">
+
+    <div class="panel active" id="panelPlay" style="position:absolute;inset:0;bottom:64px;">
+      <div id="canvasWrap"></div>
+
+      <div class="topbar">
+        <div class="chip-row">
+          <div class="stat-chip"><div class="v" id="hudTime">0:00</div><div class="l">Time</div></div>
+          <div class="stat-chip"><div class="v" id="hudSteps">0</div><div class="l">Steps</div></div>
+          <div class="stat-chip"><div class="v" id="hudCals">0</div><div class="l">Kcal</div></div>
+        </div>
+        <button class="cam-btn" id="camToggle">🎥</button>
+      </div>
+      <div class="gps-dot"><div class="d" id="gpsDotIcon"></div><span id="gpsDotText">Locating GPS…</span></div>
+
+      <div class="walk-toast hidden" id="walkToast"></div>
+
+      <div class="startzone">
+        <button id="startBtn">START</button>
+      </div>
+    </div>
+
+    <!-- Profile panel -->
+    <div class="panel" id="panelProfile">
+      <div class="panel-head"><h2>Profile</h2></div>
+      <div class="panel-body" id="profileBody"></div>
+    </div>
+
+    <!-- Leaderboard panel -->
+    <div class="panel" id="panelBoard">
+      <div class="panel-head"><h2>Leaderboards</h2></div>
+      <div class="panel-body">
+        <div class="local-badge" id="cloudBadge">📶 Local mode — synced only on this device</div>
+        <div class="lb-toggle">
+          <button class="on" data-lb="world" id="lbWorldBtn">🌍 World (All-Time)</button>
+          <button data-lb="ranked" id="lbRankedBtn">🏆 Ranked</button>
+        </div>
+        <div id="seasonStrip" class="season-strip hidden"></div>
+        <div id="lbList"></div>
+      </div>
+    </div>
+
+    <!-- Viewed profile overlay -->
+    <div class="panel" id="panelViewProfile">
+      <button class="close-x" id="closeViewProfile">✕</button>
+      <div class="panel-head"><h2 id="vpName">Player</h2></div>
+      <div class="panel-body" id="vpBody"></div>
+    </div>
+
+    <!-- Chat panel -->
+    <div class="panel" id="panelChat">
+      <div class="panel-head"><h2>Global Chat</h2></div>
+      <div class="panel-body" id="chatLog" style="display:flex;"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" maxlength="200" placeholder="Say something to the trail…">
+        <button class="chat-send" id="chatSend">➤</button>
+      </div>
+    </div>
+
+    <!-- Friends panel -->
+    <div class="panel" id="panelFriends">
+      <div class="panel-head"><h2>Friends</h2></div>
+      <div class="panel-body">
+        <div class="friend-add-row">
+          <input id="friendInput" placeholder="Add friend by username">
+          <button id="friendAddBtn">Add</button>
+        </div>
+        <div id="friendList"></div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <button class="tab-btn active" data-tab="play"><div class="ic">🎮</div><div class="lb">Play</div></button>
+      <button class="tab-btn" data-tab="profile"><div class="ic">🧍</div><div class="lb">Profile</div></button>
+      <button class="tab-btn" data-tab="board"><div class="ic">🏆</div><div class="lb">Ranks</div></button>
+      <button class="tab-btn" data-tab="chat"><div class="ic">💬</div><div class="lb">Chat</div></button>
+      <button class="tab-btn" data-tab="friends"><div class="ic">👥</div><div class="lb">Friends</div></button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   STORAGE HELPERS  (device-local persistence — see chat note about scope)
+========================================================================= */
+const LS_PROFILE = "aw_profile_v1";
+const LS_STATS = "aw_stats_v1";
+const LS_LB = "aw_lb_seed_v1";
+const LS_CHAT = "aw_chat_v1";
+const LS_FRIENDS = "aw_friends_v1";
+
+function loadJSON(key, fallback){
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+  catch(e){ return fallback; }
+}
+function saveJSON(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+
+/* =========================================================================
+   TIER / RANK SYSTEM
+========================================================================= */
+const TIERS = [
+  "Bronze III","Bronze II","Bronze I",
+  "Silver III","Silver II","Silver I",
+  "Gold III","Gold II","Gold I",
+  "Platinum III","Platinum II","Platinum I",
+  "Crystal III","Crystal II","Crystal I",
+  "Diamond III","Diamond II","Diamond I",
+  "Mythical"
+];
+const TIER_THRESHOLDS = [0,15000,35000,60000,90000,125000,165000,210000,260000,315000,375000,440000,510000,585000,665000,750000,840000,935000,1035000];
+const TIER_ICON = {Bronze:"🥉",Silver:"🥈",Gold:"🥇",Platinum:"💠",Crystal:"🔷",Diamond:"💎",Mythical:"👑"};
+function tierIcon(name){ return TIER_ICON[name.split(" ")[0]] || "🥉"; }
+function tierIndexForSteps(seasonSteps){
+  let idx = 0;
+  for(let i=0;i<TIER_THRESHOLDS.length;i++){ if(seasonSteps >= TIER_THRESHOLDS[i]) idx = i; }
+  return idx;
+}
+function currentSeasonNumber(){
+  const d = new Date();
+  const epochYear = 2026, epochMonth = 8; // Sept 2026 (0-indexed month 8) = Season 1
+  return (d.getFullYear()-epochYear)*12 + (d.getMonth()-epochMonth) + 1;
+}
+
+/* =========================================================================
+   PROFILE / SIGNUP STATE
+========================================================================= */
+let profile = loadJSON(LS_PROFILE, null);
+let stats = loadJSON(LS_STATS, {
+  totalSteps:0, totalCalories:0, totalDistanceM:0, totalTimeSec:0,
+  seasonSteps:0, season: currentSeasonNumber(), seasonHistory:[]
+});
+
+// roll season if needed
+(function rollSeason(){
+  const cs = currentSeasonNumber();
+  if(stats.season !== cs){
+    if(stats.seasonSteps > 0){
+      const idx = tierIndexForSteps(stats.seasonSteps);
+      stats.seasonHistory.unshift({season:stats.season, tier:TIERS[idx]});
+      stats.seasonHistory = stats.seasonHistory.slice(0,12);
+    }
+    stats.seasonSteps = 0;
+    stats.season = cs;
+    saveJSON(LS_STATS, stats);
+  }
+})();
+
+let unitSystem = "metric";
+let selectedGender = null;
+
+/* ---- Auth screen wiring ---- */
+const $ = (id)=>document.getElementById(id);
+function setDot(n){ document.querySelectorAll(".step-dots span").forEach(s=>s.classList.toggle("on", +s.dataset.d <= n)); }
+
+$("toStep1").onclick = ()=>{
+  const u = $("inUsername").value.trim();
+  const e = $("inEmail").value.trim();
+  const a = parseInt($("inAge").value,10);
+  if(u.length < 2){ $("err0").textContent = "Enter a username (2+ characters)."; return; }
+  if(!/^\S+@\S+\.\S+$/.test(e)){ $("err0").textContent = "Enter a valid email."; return; }
+  if(!a || a < 13 || a > 99){ $("err0").textContent = "Enter a valid age (13-99)."; return; }
+  $("err0").textContent = "";
+  $("authStep0").classList.add("hidden"); $("authStep1").classList.remove("hidden"); setDot(1);
+};
+$("back0").onclick = ()=>{ $("authStep1").classList.add("hidden"); $("authStep0").classList.remove("hidden"); setDot(0); };
+$("genderMale").onclick = ()=>{ selectedGender="male"; $("genderMale").classList.add("sel"); $("genderFemale").classList.remove("sel"); };
+$("genderFemale").onclick = ()=>{ selectedGender="female"; $("genderFemale").classList.add("sel"); $("genderMale").classList.remove("sel"); };
+$("toStep2").onclick = ()=>{
+  if(!selectedGender){ $("err1").textContent = "Pick a character to continue."; return; }
+  $("err1").textContent = "";
+  $("authStep1").classList.add("hidden"); $("authStep2").classList.remove("hidden"); setDot(2);
+};
+$("back1").onclick = ()=>{ $("authStep2").classList.add("hidden"); $("authStep1").classList.remove("hidden"); setDot(1); };
+$("unitMetric").onclick = ()=>{ unitSystem="metric"; $("unitMetric").classList.add("on"); $("unitImperial").classList.remove("on"); $("weightLabel").textContent="Weight (kg)"; $("heightLabel").textContent="Height (cm)"; };
+$("unitImperial").onclick = ()=>{ unitSystem="imperial"; $("unitImperial").classList.add("on"); $("unitMetric").classList.remove("on"); $("weightLabel").textContent="Weight (lb)"; $("heightLabel").textContent="Height (in)"; };
+
+$("finishSignup").onclick = ()=>{
+  const wRaw = parseFloat($("inWeight").value);
+  const hRaw = parseFloat($("inHeight").value);
+  if(!wRaw || wRaw <= 0 || !hRaw || hRaw <= 0){ $("err2").textContent = "Enter your weight and height."; return; }
+  const weightKg = unitSystem === "metric" ? wRaw : wRaw * 0.453592;
+  const heightCm = unitSystem === "metric" ? hRaw : hRaw * 2.54;
+  profile = {
+    username: $("inUsername").value.trim(),
+    email: $("inEmail").value.trim(),
+    age: parseInt($("inAge").value,10),
+    gender: selectedGender,
+    weightKg: Math.round(weightKg*10)/10,
+    heightCm: Math.round(heightCm*10)/10,
+    createdAt: Date.now()
+  };
+  saveJSON(LS_PROFILE, profile);
+  ensureMyLbEntry();
+  enterGame();
+};
+
+/* =========================================================================
+   LEADERBOARD (local demo store, seeded with rival "bots" for feel).
+   NOTE: real cross-device multiplayer needs a live backend; see chat reply.
+========================================================================= */
+function seedBotsOnce(){
+  let lb = loadJSON(LS_LB, null);
+  if(lb) return lb;
+  const names = ["Maple_Runner","Zara.K","IronStrider","Coach_Devon","PixelPacer","BlueTrail99","Nova_Wanders","GraniteStep","Wren&Wonder","TrekkerTia","AshPath","QuietMiles","Solstice_Jo","RiverBendRae","CedarStomp"];
+  lb = names.map((n,i)=>({
+    username:n,
+    totalSteps: Math.floor(200000 + Math.random()*3200000),
+    seasonSteps: Math.floor(Math.random()*900000),
+    isBot:true
+  }));
+  saveJSON(LS_LB, lb);
+  return lb;
+}
+function ensureMyLbEntry(){
+  let lb = seedBotsOnce();
+  let mine = lb.find(p=>p.isMe);
+  if(!mine){
+    lb.push({username:profile.username, totalSteps:stats.totalSteps, seasonSteps:stats.seasonSteps, isMe:true});
+  } else {
+    mine.username = profile.username;
+  }
+  saveJSON(LS_LB, lb);
+}
+function syncMyLbEntry(){
+  let lb = loadJSON(LS_LB, []);
+  let mine = lb.find(p=>p.isMe);
+  if(mine){ mine.totalSteps = stats.totalSteps; mine.seasonSteps = stats.seasonSteps; }
+  saveJSON(LS_LB, lb);
+}
+
+let currentLbMode = "world";
+function renderLeaderboard(){
+  const lb = loadJSON(LS_LB, []).slice();
+  const list = $("lbList");
+  const seasonStrip = $("seasonStrip");
+  list.innerHTML = "";
+  if(currentLbMode === "world"){
+    seasonStrip.classList.add("hidden");
+    lb.sort((a,b)=>b.totalSteps - a.totalSteps);
+    lb.forEach((p,i)=>{
+      list.appendChild(lbRow(p, i, "totalSteps", null));
+    });
+  } else {
+    seasonStrip.classList.remove("hidden");
+    seasonStrip.innerHTML = `<span>Season ${currentSeasonNumber()}</span><span>Resets on the 1st</span>`;
+    lb.sort((a,b)=>b.seasonSteps - a.seasonSteps);
+    lb.forEach((p,i)=>{
+      const idx = tierIndexForSteps(p.seasonSteps);
+      list.appendChild(lbRow(p, i, "seasonSteps", TIERS[idx]));
+    });
+  }
+}
+function lbRow(p, i, field, tierName){
+  const row = document.createElement("div");
+  row.className = "lb-row" + (p.isMe ? " me":"");
+  const isTop10 = i < 10 && currentLbMode==="ranked";
+  const glow = isTop10 && tierName === "Mythical";
+  row.innerHTML = `
+    <div class="lb-rank-num">${i+1}</div>
+    <div class="lb-avatar ${glow?'lb-glow-ring':''}" style="background:${p.isMe?'linear-gradient(155deg,#F0B23E,#D6941F)':'rgba(255,255,255,0.08)'}">${p.isMe? (profile.gender==='female'?'🙋‍♀️':'🙋‍♂️') : '🚶'}</div>
+    <div class="lb-name-wrap">
+      <div class="lb-name ${glow?'lb-glow':''}" data-uname="${p.username}">${p.username}${p.isMe?' (you)':''}${isTop10?`<span class="top10-badge">#${i+1}</span>`:''}</div>
+      <div class="lb-sub">${tierName ? tierIcon(tierName)+' '+tierName : 'Total steps walked'}</div>
+    </div>
+    <div class="lb-val">${p[field].toLocaleString()}</div>
+  `;
+  if(!p.isMe){
+    row.querySelector(".lb-name-wrap").style.cursor = "pointer";
+    row.querySelector(".lb-name-wrap").onclick = ()=> openViewProfile(p);
+  }
+  return row;
+}
+function openViewProfile(p){
+  $("vpName").textContent = p.username;
+  const idx = tierIndexForSteps(p.seasonSteps);
+  $("vpBody").innerHTML = `
+    <div class="profile-avatar-badge">🚶</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v">${p.totalSteps.toLocaleString()}</div><div class="l">All-time steps</div></div>
+      <div class="stat-box"><div class="v">${p.seasonSteps.toLocaleString()}</div><div class="l">Steps this season</div></div>
+    </div>
+    <div class="rank-banner" style="background:rgba(255,255,255,0.05);">
+      <div class="rank-icon">${tierIcon(TIERS[idx])}</div>
+      <div><div style="font-weight:700;">${TIERS[idx]}</div><div style="font-size:12px;color:#9FC3B9;">Current season rank</div></div>
+    </div>
+    <div class="empty-note">This is that player's public game stats — body info like weight and height stays private to each player.</div>
+  `;
+  showPanel("viewprofile");
+}
+$("closeViewProfile").onclick = ()=> showPanel("board");
+$("lbWorldBtn").onclick = ()=>{ currentLbMode="world"; $("lbWorldBtn").classList.add("on"); $("lbRankedBtn").classList.remove("on"); renderLeaderboard(); };
+$("lbRankedBtn").onclick = ()=>{ currentLbMode="ranked"; $("lbRankedBtn").classList.add("on"); $("lbWorldBtn").classList.remove("on"); renderLeaderboard(); };
+
+/* =========================================================================
+   CHAT (local demo store)
+========================================================================= */
+function seedChatOnce(){
+  let log = loadJSON(LS_CHAT, null);
+  if(log) return log;
+  log = [
+    {who:"CedarStomp", text:"morning walk crew, who's up?", t:Date.now()-1000*60*40},
+    {who:"Nova_Wanders", text:"just hit gold this season 🥇", t:Date.now()-1000*60*22},
+    {who:"QuietMiles", text:"anyone know a good loop near the river?", t:Date.now()-1000*60*9}
+  ];
+  saveJSON(LS_CHAT, log);
+  return log;
+}
+function renderChat(){
+  const log = seedChatOnce();
+  const el = $("chatLog");
+  el.innerHTML = "";
+  log.slice(-60).forEach(m=>{
+    const div = document.createElement("div");
+    div.className = "msg " + (m.who === profile.username ? "me":"other");
+    div.innerHTML = (m.who===profile.username? "" : `<div class="who">${m.who}</div>`) + m.text;
+    el.appendChild(div);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+$("chatSend").onclick = sendChat;
+$("chatInput").addEventListener("keydown",(e)=>{ if(e.key==="Enter") sendChat(); });
+function sendChat(){
+  const val = $("chatInput").value.trim();
+  if(!val) return;
+  const log = seedChatOnce();
+  log.push({who:profile.username, text:val, t:Date.now()});
+  saveJSON(LS_CHAT, log);
+  $("chatInput").value = "";
+  renderChat();
+}
+
+/* =========================================================================
+   FRIENDS (local demo store)
+========================================================================= */
+function renderFriends(){
+  const friends = loadJSON(LS_FRIENDS, []);
+  const el = $("friendList");
+  el.innerHTML = "";
+  if(friends.length===0){ el.innerHTML = `<div class="empty-note">No friends yet — add someone by username to track them.</div>`; return; }
+  friends.forEach(f=>{
+    const lb = loadJSON(LS_LB, []);
+    const p = lb.find(x=>x.username.toLowerCase()===f.toLowerCase());
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    row.innerHTML = `<div class="fn">${f}</div><div class="fs">${p ? p.totalSteps.toLocaleString()+' steps' : 'no data yet'}</div>`;
+    row.style.cursor="pointer";
+    row.onclick = ()=>{ if(p) openViewProfile(p); };
+    el.appendChild(row);
+  });
+}
+$("friendAddBtn").onclick = ()=>{
+  const val = $("friendInput").value.trim();
+  if(!val) return;
+  let friends = loadJSON(LS_FRIENDS, []);
+  if(!friends.some(f=>f.toLowerCase()===val.toLowerCase())) friends.push(val);
+  saveJSON(LS_FRIENDS, friends);
+  $("friendInput").value = "";
+  renderFriends();
+};
+
+/* =========================================================================
+   TAB / PANEL NAVIGATION
+========================================================================= */
+function showPanel(name){
+  ["play","profile","board","chat","friends","viewprofile"].forEach(p=>{
+    document.getElementById("panel"+p.charAt(0).toUpperCase()+p.slice(1)).classList.toggle("active", p===name);
+  });
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.tab===name));
+  if(name==="profile") renderProfile();
+  if(name==="board") renderLeaderboard();
+  if(name==="chat") renderChat();
+  if(name==="friends") renderFriends();
+}
+document.querySelectorAll(".tab-btn").forEach(b=> b.onclick = ()=> showPanel(b.dataset.tab));
+
+function bmiOf(p){ const hM = p.heightCm/100; return p.weightKg/(hM*hM); }
+function bodyFatOf(p){
+  const bmi = bmiOf(p);
+  const sex = p.gender === "male" ? 1 : 0;
+  let bf = 1.20*bmi + 0.23*p.age - 10.8*sex - 5.4;
+  return Math.max(3, Math.min(60, bf));
+}
+function renderProfile(){
+  const bmi = bmiOf(profile).toFixed(1);
+  const bf = bodyFatOf(profile).toFixed(1);
+  const idx = tierIndexForSteps(stats.seasonSteps);
+  $("profileBody").innerHTML = `
+    <div class="profile-avatar-badge">${profile.gender==='female'?'🙋‍♀️':'🙋‍♂️'}</div>
+    <div style="font-family:'Fredoka',sans-serif;font-size:20px;">${profile.username}</div>
+    <div style="color:#9FC3B9;font-size:12.5px;margin-bottom:6px;">${profile.email}</div>
+
+    <div class="rank-banner" style="background:linear-gradient(135deg, rgba(240,178,62,0.18), rgba(240,178,62,0.05));">
+      <div class="rank-icon">${tierIcon(TIERS[idx])}</div>
+      <div><div style="font-weight:700;">${TIERS[idx]}</div><div style="font-size:12px;color:#CFE8DF;">Season ${currentSeasonNumber()} rank</div></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v">${stats.totalSteps.toLocaleString()}</div><div class="l">All-time steps</div></div>
+      <div class="stat-box"><div class="v">${Math.round(stats.totalCalories).toLocaleString()}</div><div class="l">Calories burned</div></div>
+      <div class="stat-box"><div class="v">${(stats.totalDistanceM/1000).toFixed(2)} km</div><div class="l">Distance walked</div></div>
+      <div class="stat-box"><div class="v">${Math.round(stats.totalTimeSec/60)} min</div><div class="l">Time active</div></div>
+    </div>
+
+    <div class="pf-row"><div class="k">Age</div><div class="v">${profile.age}</div></div>
+    <div class="pf-row"><div class="k">Gender</div><div class="v">${profile.gender==='male'?'Male':'Female'}</div></div>
+    <div class="pf-row"><div class="k">Weight</div><div class="v">${profile.weightKg} kg</div></div>
+    <div class="pf-row"><div class="k">Height</div><div class="v">${profile.heightCm} cm</div></div>
+    <div class="pf-row"><div class="k">BMI</div><div class="v">${bmi}</div></div>
+    <div class="pf-row"><div class="k">Estimated body fat</div><div class="v">${bf}%</div></div>
+
+    ${stats.seasonHistory.length ? `<div style="margin-top:18px;font-size:12.5px;color:#9FC3B9;font-weight:700;">Past seasons</div>
+    ${stats.seasonHistory.map(h=>`<div class="pf-row"><div class="k">Season ${h.season}</div><div class="v">${tierIcon(h.tier)} ${h.tier}</div></div>`).join("")}` : ""}
+
+    <div class="empty-note">Estimated body fat uses the Deurenberg formula from your BMI, age and gender — it's an estimate, not a medical measurement.</div>
+  `;
+}
+
+/* =========================================================================
+   3D GAME WORLD  (Three.js) — stylized procedural scenery, GPS-driven
+========================================================================= */
+let renderer, scene, camera, avatarGroup, avatarParts;
+let worldRoot; // holds all chunk meshes, offset opposite to player's travel
+let chunkCache = new Map();
+const CELL = 12;        // meters per grid cell
+const BLOCK = 6;        // cells per city block (roads run along block edges)
+const VIEW_RADIUS = 4;  // blocks around player to render
+let camMode = 0; // 0 = chase, 1 = first-person
+let clock;
+
+function hash2(x, y){
+  let h = Math.sin(x*127.1 + y*311.7) * 43758.5453123;
+  return h - Math.floor(h);
+}
+function cellKey(cx, cz){ return cx+","+cz; }
+
+function initThree(){
+  const wrap = $("canvasWrap");
+  scene = new THREE.Scene();
+  clock = new THREE.Clock();
+
+  // sky dome with gradient
+  const skyGeo = new THREE.SphereGeometry(500, 24, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms:{
+      top:{value:new THREE.Color(0x6FBFEF)},
+      bottom:{value:new THREE.Color(0xEAF8FF)},
+    },
+    vertexShader:`varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`varying vec3 vPos; uniform vec3 top; uniform vec3 bottom;
+      void main(){ float h = normalize(vPos).y*0.5+0.5; gl_FragColor = vec4(mix(bottom, top, pow(h,0.55)), 1.0); }`,
+    side: THREE.BackSide, depthWrite:false
+  });
+  scene.add(new THREE.Mesh(skyGeo, skyMat));
+  scene.fog = new THREE.Fog(0xDFF3FF, 60, 210);
+
+  camera = new THREE.PerspectiveCamera(62, wrap.clientWidth/wrap.clientHeight, 0.1, 600);
+  camera.position.set(0, 2.2, 5.5);
+
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  renderer.shadowMap.enabled = true;
+  wrap.appendChild(renderer.domElement);
+
+  const hemi = new THREE.HemisphereLight(0xBFE3FF, 0x4C8C48, 0.85);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xFFF3D6, 1.05);
+  sun.position.set(40, 70, 20);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-60; sun.shadow.camera.right=60; sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60;
+  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0xCFEFFF, 0.45);
+  rim.position.set(-6, 3, -8);
+  scene.add(rim);
+  const fill = new THREE.PointLight(0xFFEFD8, 0.35, 8);
+  fill.position.set(0, 2.4, 2.2);
+  scene.add(fill);
+
+  worldRoot = new THREE.Group();
+  scene.add(worldRoot);
+
+  avatarGroup = buildCharacter(profile.gender);
+  scene.add(avatarGroup);
+
+  window.addEventListener("resize", onResize);
+  onResize();
+  refreshWorld();
+  animate();
+}
+function onResize(){
+  const wrap = $("canvasWrap");
+  camera.aspect = wrap.clientWidth/wrap.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+
+/* ---- Character builder ---- */
+let toonGradientTex = null;
+function getToonGradient(){
+  if(toonGradientTex) return toonGradientTex;
+  const c = document.createElement("canvas"); c.width=4; c.height=1;
+  const ctx = c.getContext("2d");
+  [70,150,210,255].forEach((v,i)=>{ ctx.fillStyle = `rgb(${v},${v},${v})`; ctx.fillRect(i,0,1,1); });
+  toonGradientTex = new THREE.CanvasTexture(c);
+  toonGradientTex.minFilter = THREE.NearestFilter;
+  toonGradientTex.magFilter = THREE.NearestFilter;
+  return toonGradientTex;
+}
+
+function buildCharacter(gender){
+  const g = new THREE.Group();
+  const isF = gender === "female";
+  const grad = getToonGradient();
+  const toon = (c)=> new THREE.MeshToonMaterial({color:c, gradientMap:grad});
+
+  function outline(mesh, scale, color){
+    const o = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({color: color!==undefined?color:0x14100D, side:THREE.BackSide}));
+    o.scale.setScalar(scale||1.05);
+    mesh.add(o);
+    return mesh;
+  }
+  function lathe(points, radialSegments, material, outlineScale){
+    const geo = new THREE.LatheGeometry(points.map(p=> new THREE.Vector2(Math.max(0.0005,p[0]), p[1])), radialSegments);
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, material);
+    m.castShadow = true;
+    outline(m, outlineScale);
+    return m;
+  }
+
+  // ---- palette (stylized anime streetwear trainer, gender accent) ----
+  const skinTones = [0xF2C9A0, 0xE8B98C, 0xD9A075];
+  const skin = skinTones[Math.floor(Math.random()*skinTones.length)];
+  const skinShade = new THREE.Color(skin).multiplyScalar(0.88).getHex();
+  const jacket = 0x181A20;                 // near-black base jacket/top
+  const accent = isF ? 0xE84393 : 0x2F7FE0; // pink vs blue accent trim
+  const accent2 = isF ? 0x9B6FE0 : 0x35C7E0; // purple vs cyan streak/highlight
+  const hairBase = isF ? 0x231A33 : 0x17141A;
+  const eyeColor = isF ? 0xB07FE8 : 0x3FA0E8;
+  const shoeSole = 0xF3F1EA;
+
+  const matSkin = toon(skin);
+  const matSkinShade = toon(skinShade);
+  const matJacket = toon(jacket);
+  const matAccent = toon(accent);
+  const matAccent2 = toon(accent2);
+  const matHair = toon(hairBase);
+  const matHairStreak = toon(accent2);
+  const matShoe = toon(0x121316);
+  const matSole = toon(shoeSole);
+
+  // ---- leg lengths drive torso base height so feet land exactly on the ground ----
+  const legRad = isF?0.075:0.086;
+  const legUpper = isF?0.38:0.40, legLower = isF?0.40:0.42;
+  const hipY = legUpper + legLower;
+
+  // ---- torso: full jacket for him, cropped jacket + bare midriff for her ----
+  const jacketLen = isF ? 0.34 : 0.60;
+  const jacketProfile = isF ? [
+    [0.0,0.0],[0.128,0.03],[0.150,0.10],[0.140,0.19],[0.118,0.27],
+    [0.132,jacketLen*0.62],[0.140,jacketLen*0.85],[0.100,jacketLen]
+  ] : [
+    [0.0,0.0],[0.150,0.03],[0.172,0.10],[0.160,0.19],[0.146,0.29],
+    [0.170,0.39],[0.200,0.49],[0.212,0.58],[0.185,0.63],[0.10,0.66],[0.0,jacketLen]
+  ];
+  const torsoY = hipY + (isF? 0.30 : 0.02); // her jacket sits higher, midriff fills the gap
+  const jacketMesh = lathe(jacketProfile, 26, matJacket, 1.045);
+  jacketMesh.position.y = torsoY;
+  g.add(jacketMesh);
+
+  if(isF){
+    // bare midriff between skirt and cropped jacket
+    const midriff = lathe([[0.10,0],[0.112,0.06],[0.10,0.14],[0.09,0.22]], 20, matSkin, 1.03);
+    midriff.position.y = hipY + 0.03;
+    g.add(midriff);
+    // pleated mini skirt flaring out over the hips
+    const skirt = lathe([[0.095,0.14],[0.13,0.10],[0.20,0.02],[0.215,0.0]], 24, matAccent, 1.05);
+    skirt.position.y = hipY - 0.14;
+    g.add(skirt);
+    const skirtTrim = new THREE.Mesh(new THREE.TorusGeometry(0.213,0.012,8,24), matJacket);
+    skirtTrim.rotation.x = Math.PI/2;
+    skirtTrim.position.y = hipY - 0.14;
+    g.add(skirtTrim);
+  } else {
+    // cargo pocket + belt for him
+    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.175,0.014,8,24), matAccent);
+    belt.rotation.x = Math.PI/2;
+    belt.position.y = hipY + 0.02;
+    g.add(belt);
+  }
+
+  // chest zip stripe + collar accent
+  const zip = new THREE.Mesh(new THREE.BoxGeometry(0.022, jacketLen*0.82, 0.02), matAccent);
+  zip.position.set(0, torsoY+jacketLen*0.36, isF?0.128:0.175);
+  g.add(zip);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(isF?0.075:0.085, 0.016, 8, 16, Math.PI*1.3), matAccent);
+  collar.rotation.set(Math.PI/2, 0, Math.PI*0.85);
+  collar.position.set(0, torsoY+jacketLen-0.03, 0.02);
+  g.add(collar);
+
+  // backpack
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.22,0.09), matJacket);
+  outline(pack, 1.05);
+  pack.position.set(0, torsoY+jacketLen*0.55, -0.145);
+  g.add(pack);
+  const packStripe = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.2,0.005), matAccent2);
+  packStripe.position.set(0,0,0.048);
+  pack.add(packStripe);
+
+  // ---- neck + head ----
+  const neck = lathe([[0.05,0],[0.058,0.05],[0.052,0.09]], 14, matSkin, 1.04);
+  neck.position.y = torsoY + jacketLen - (isF?0.0:0.03);
+  g.add(neck);
+
+  const headY = neck.position.y + 0.115;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135,32,26), matSkin);
+  head.position.y = headY;
+  head.scale.set(0.9,1.02,0.94);
+  head.castShadow = true;
+  outline(head, 1.05);
+  g.add(head);
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.1,20,16), matSkin);
+  jaw.position.set(0, headY-0.08, 0.018);
+  jaw.scale.set(0.9,0.55,0.85);
+  g.add(jaw);
+
+  // ---- big stylized anime eyes ----
+  [-1,1].forEach(side=>{
+    const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.032,14,12), toon(0xF7F4EC));
+    sclera.scale.set(0.85,1,0.55);
+    sclera.position.set(side*0.05, headY+0.008, 0.115);
+    g.add(sclera);
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.02,12,10), toon(eyeColor));
+    iris.scale.set(1,1,0.5);
+    iris.position.set(side*0.05, headY+0.002, 0.128);
+    g.add(iris);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.009,8,6), toon(0x0A0806));
+    pupil.scale.set(1,1,0.4);
+    pupil.position.set(side*0.05, headY+0.002, 0.134);
+    g.add(pupil);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.006,6,6), new THREE.MeshBasicMaterial({color:0xFFFFFF}));
+    spark.position.set(side*0.058, headY+0.015, 0.137);
+    g.add(spark);
+    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.032,0.006,6,10,Math.PI*0.75), matHair);
+    lash.position.set(side*0.05, headY+0.024, 0.112);
+    lash.rotation.set(0, side<0?0:Math.PI, Math.PI*0.5);
+    g.add(lash);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.009,0.01), matHair);
+    brow.position.set(side*0.05, headY+0.05, 0.122);
+    brow.rotation.z = side*-0.15;
+    g.add(brow);
+  });
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.012,0.03,8), matSkinShade);
+  nose.rotation.x = Math.PI/2;
+  nose.position.set(0, headY-0.02, 0.132);
+  g.add(nose);
+  const lip = new THREE.Mesh(new THREE.SphereGeometry(0.022,10,8), toon(0xC97A73));
+  lip.scale.set(1,0.4,0.5);
+  lip.position.set(0, headY-0.062, 0.122);
+  g.add(lip);
+
+  // ---- hair (spiky for him, long streaked ponytail for her) ----
+  if(isF){
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.14,20,16), matHair);
+    cap.scale.set(1.02,1.1,1.05);
+    cap.position.set(0, headY+0.02, -0.005);
+    outline(cap,1.05);
+    g.add(cap);
+    const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.13,16,12,0,Math.PI*2,0,Math.PI*0.4), matHair);
+    fringe.position.set(0, headY+0.075, 0.02);
+    fringe.rotation.x = 0.15;
+    g.add(fringe);
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, headY+0.03, -0.14),
+      new THREE.Vector3(0.02, headY-0.14, -0.19),
+      new THREE.Vector3(-0.015, headY-0.34, -0.16),
+      new THREE.Vector3(0.02, headY-0.52, -0.08),
+    ]);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.034, 8, false), matHair);
+    outline(tube, 1.06);
+    g.add(tube);
+    const streakCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.06, headY+0.06, 0.02),
+      new THREE.Vector3(-0.07, headY-0.05, -0.02),
+      new THREE.Vector3(-0.05, headY-0.16, -0.03),
+    ]);
+    const streak = new THREE.Mesh(new THREE.TubeGeometry(streakCurve, 10, 0.014, 6, false), matHairStreak);
+    g.add(streak);
+  } else {
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.128,18,14), matHair);
+    cap.scale.set(1.02,0.7,1.02);
+    cap.position.set(0, headY+0.03, -0.006);
+    outline(cap,1.06);
+    g.add(cap);
+    // a few tufts peeking out from under the back/sides of the cap (front stays clear under the brim)
+    for(let i=0;i<5;i++){
+      const ang = Math.PI*0.55 + (i/4)*Math.PI*0.9; // back hemisphere only
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.026,0.09,6), i===2?matHairStreak:matHair);
+      spike.position.set(Math.cos(ang)*0.1, headY+0.055, Math.sin(ang)*0.1);
+      spike.rotation.z = Math.cos(ang)*0.9;
+      spike.rotation.x = 1.1 + Math.sin(ang)*0.3;
+      g.add(spike);
+    }
+  }
+
+  // ---- cap (worn tilted back, brim forward) — sits ON TOP of the head, doesn't engulf the face ----
+  const capBase = new THREE.Mesh(new THREE.SphereGeometry(0.148,18,14,0,Math.PI*2,0,Math.PI*0.46), matJacket);
+  capBase.position.set(0, headY+0.095, -0.015);
+  capBase.rotation.x = -0.1;
+  outline(capBase, 1.05);
+  g.add(capBase);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.012,20,1,false,0,Math.PI), matJacket);
+  brim.rotation.x = Math.PI/2 + 0.05;
+  brim.position.set(0, headY+0.11, 0.13);
+  g.add(brim);
+  const badge = new THREE.Mesh(new THREE.CylinderGeometry(0.024,0.024,0.008,16), matAccent);
+  badge.rotation.x = Math.PI/2;
+  badge.position.set(0, headY+0.13, 0.132);
+  g.add(badge);
+
+  // ---- articulated two-segment limbs, sculpted with a muscle taper ----
+  function buildLeg(x, upperLen, lowerLen, rad, footColor){
+    const hip = new THREE.Group();
+    hip.position.set(x, hipY, 0);
+    const legMat = isF ? matSkin : matJacket;
+    const thigh = lathe([
+      [rad*1.05,0],[rad*1.15,-0.04],[rad*1.05,-upperLen*0.35],[rad*0.85,-upperLen*0.7],[rad*0.62,-upperLen]
+    ], 16, legMat, 1.045);
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -upperLen;
+    hip.add(knee);
+    const shinMat = isF ? matSkin : matJacket;
+    const shin = lathe([
+      [rad*0.62,0],[rad*0.72,-lowerLen*0.22],[rad*0.6,-lowerLen*0.55],[rad*0.42,-lowerLen*0.85],[rad*0.36,-lowerLen]
+    ], 16, shinMat, 1.045);
+    knee.add(shin);
+
+    if(isF){
+      // thigh-high sock
+      const sock = lathe([
+        [rad*0.68,-lowerLen*0.18],[rad*0.66,-lowerLen*0.45],[rad*0.5,-lowerLen*0.8],[rad*0.42,-lowerLen*0.98]
+      ], 14, matJacket, 1.02);
+      knee.add(sock);
+      const sockTrim = new THREE.Mesh(new THREE.TorusGeometry(rad*0.68,0.008,6,16), matAccent);
+      sockTrim.rotation.x = Math.PI/2;
+      sockTrim.position.y = -lowerLen*0.18;
+      knee.add(sockTrim);
+    } else {
+      const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.075,0.09,0.02), matAccent);
+      thigh.add(pocket);
+      pocket.position.set(0,-upperLen*0.55,rad*0.95);
+    }
+
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.095,0.055,0.235), matShoe);
+    foot.position.set(0,-lowerLen-0.02,0.05);
+    foot.castShadow = true;
+    outline(foot, 1.05);
+    knee.add(foot);
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.02,0.245), matSole);
+    sole.position.set(0,-0.037,0.05);
+    foot.add(sole);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.098,0.02,0.05), matAccent);
+    stripe.position.set(0,0,0.06);
+    foot.add(stripe);
+    return {hip, knee};
+  }
+  function buildArm(x, upperLen, lowerLen, rad){
+    const shoulder = new THREE.Group();
+    shoulder.position.set(x, torsoY+jacketLen-0.09, 0);
+    const upper = lathe([
+      [rad*1.1,0],[rad*1.25,-0.035],[rad*1.05,-upperLen*0.4],[rad*0.8,-upperLen*0.75],[rad*0.6,-upperLen]
+    ], 14, isF?matJacket:matJacket, 1.05);
+    shoulder.add(upper);
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -upperLen;
+    shoulder.add(elbow);
+    const fore = lathe([
+      [rad*0.6,0],[rad*0.66,-lowerLen*0.25],[rad*0.52,-lowerLen*0.6],[rad*0.38,-lowerLen*0.9],[rad*0.32,-lowerLen]
+    ], 14, matSkin, 1.05);
+    elbow.add(fore);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(rad*0.8,12,10), matSkin);
+    hand.position.y = -lowerLen-0.018;
+    hand.scale.set(1,1.15,0.7);
+    elbow.add(hand);
+    const glove = new THREE.Mesh(new THREE.CylinderGeometry(rad*0.62,rad*0.7,0.06,10), matJacket);
+    glove.position.y = -lowerLen+0.02;
+    elbow.add(glove);
+    const wristband = new THREE.Mesh(new THREE.TorusGeometry(rad*0.62,0.01,6,14), matAccent);
+    wristband.rotation.x = Math.PI/2;
+    wristband.position.y = -lowerLen+0.05;
+    elbow.add(wristband);
+    elbow.rotation.x = 0.18;
+    return {shoulder, elbow};
+  }
+
+  const legL = buildLeg(-0.095, legUpper, legLower, legRad);
+  const legR = buildLeg(0.095, legUpper, legLower, legRad);
+  g.add(legL.hip); g.add(legR.hip);
+
+  const armUpper = isF?0.27:0.29, armLower = isF?0.25:0.27;
+  const armL = buildArm(-0.225, armUpper, armLower, 0.052);
+  const armR = buildArm(0.225, armUpper, armLower, 0.052);
+  g.add(armL.shoulder); g.add(armR.shoulder);
+
+  g.userData.hipL = legL.hip; g.userData.kneeL = legL.knee;
+  g.userData.hipR = legR.hip; g.userData.kneeR = legR.knee;
+  g.userData.shoulderL = armL.shoulder; g.userData.elbowL = armL.elbow;
+  g.userData.shoulderR = armR.shoulder; g.userData.elbowR = armR.elbow;
+  g.userData.head = head;
+  g.position.set(0,0,0);
+  g.traverse(o=> o.receiveShadow = false);
+  return g;
+}
+
+/* ---- Procedural world chunks ---- */
+/* ---- procedural detail textures (no external images — generated once, reused everywhere) ---- */
+function canvasTex(draw, size){
+  const c = document.createElement("canvas"); c.width = size; c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+// neutral light/dark relief pattern — tinted green via material.color for grass, so one texture serves park + city lawns
+const GRASS_TEX = canvasTex((ctx,s)=>{
+  ctx.fillStyle = "#B9C9AE"; ctx.fillRect(0,0,s,s);
+  for(let i=0;i<1100;i++){
+    const x=Math.random()*s, y=Math.random()*s;
+    ctx.fillStyle = Math.random()<0.55 ? "rgba(70,95,55,0.35)" : "rgba(220,235,190,0.4)";
+    ctx.fillRect(x,y,1+Math.random()*1.6,3+Math.random()*5);
+  }
+  for(let i=0;i<10;i++){
+    ctx.fillStyle = Math.random()<0.5 ? "rgba(70,95,55,0.18)" : "rgba(230,240,200,0.15)";
+    ctx.beginPath(); ctx.arc(Math.random()*s,Math.random()*s,14+Math.random()*26,0,Math.PI*2); ctx.fill();
+  }
+}, 256);
+// asphalt speckle, tinted via material.color
+const ROAD_TEX = canvasTex((ctx,s)=>{
+  ctx.fillStyle = "#B3ADA2"; ctx.fillRect(0,0,s,s);
+  for(let i=0;i<1400;i++){
+    const g = 90+Math.random()*110;
+    ctx.fillStyle = `rgba(${g},${g},${g},0.5)`;
+    ctx.fillRect(Math.random()*s,Math.random()*s,1,1);
+  }
+}, 128);
+// a handful of building-facade variants: base wall + a grid of windows (lit/unlit baked in), tinted per building
+const BUILDING_TEXES = [0,1,2].map((seed)=> canvasTex((ctx,s)=>{
+  ctx.fillStyle = "#E9E4D6"; ctx.fillRect(0,0,s,s);
+  const cols = 2, wW = s/cols*0.52, wH = s*0.6, padX = (s/cols-wW)/2, padY = (s-wH)/2;
+  for(let cx=0; cx<cols; cx++){
+    const x = cx*(s/cols)+padX, y = padY;
+    const r = Math.sin(seed*13.7 + cx*7.1) * 0.5 + 0.5;
+    ctx.fillStyle = r < 0.4 ? "#F2D98A" : "#3E5064";
+    ctx.fillRect(x,y,wW,wH);
+    ctx.strokeStyle = "rgba(30,26,20,0.35)"; ctx.lineWidth = 3;
+    ctx.strokeRect(x,y,wW,wH);
+    ctx.beginPath(); ctx.moveTo(x,y+wH/2); ctx.lineTo(x+wW,y+wH/2); ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(30,26,20,0.15)"; ctx.lineWidth = 2;
+  ctx.strokeRect(1,1,s-2,s-2);
+}, 128));
+
+function materialGrass(shade){ return new THREE.MeshStandardMaterial({map:GRASS_TEX, color:shade, roughness:1}); }
+const MAT_ROAD = new THREE.MeshStandardMaterial({map:ROAD_TEX, color:0x8F887C, roughness:0.95});
+const MAT_ROAD_LINE = new THREE.MeshStandardMaterial({color:0xE7DFC9, roughness:0.9});
+const MAT_CURB = new THREE.MeshStandardMaterial({color:0xC9C3B4, roughness:0.9});
+const BUILDING_PALETTE = [0xD98E7A,0xE7C9A0,0xC97C86,0x8FA6AE,0xE3DAC4,0xB7876B];
+const ROOF_PALETTE = [0x5C7A85,0x7A4E4E,0x4F6B57,0x8A6D46];
+const MAT_WATER = new THREE.ShaderMaterial({
+  uniforms:{ time:{value:0}, colorA:{value:new THREE.Color(0x1F8AA0)}, colorB:{value:new THREE.Color(0x7FE0D6)} },
+  vertexShader:`
+    uniform float time; varying vec2 vUv; varying float vWave;
+    void main(){
+      vUv = uv;
+      vec3 p = position;
+      float w = sin(p.x*0.6+time*1.4)*0.05 + sin(p.y*0.9+time*1.9)*0.04;
+      p.z += w; vWave = w;
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(p,1.0);
+    }`,
+  fragmentShader:`
+    varying vec2 vUv; varying float vWave; uniform vec3 colorA; uniform vec3 colorB;
+    void main(){
+      float s = smoothstep(-0.05,0.06,vWave);
+      vec3 c = mix(colorA, colorB, s*0.6 + vUv.y*0.15);
+      float edge = min(min(vUv.x,1.0-vUv.x), min(vUv.y,1.0-vUv.y));
+      float foam = 1.0 - smoothstep(0.0,0.035,edge);
+      c = mix(c, vec3(0.86,0.96,0.94), foam*0.8);
+      gl_FragColor = vec4(c,0.92);
+    }`,
+  transparent:true
+});
+let waterMeshes = [];
+
+function blockType(bx, bz){
+  const h = hash2(bx*3.1, bz*7.7);
+  if(h < 0.10) return "water";
+  if(h < 0.24) return "park";
+  return "city";
+}
+
+function buildChunk(bx, bz){
+  const group = new THREE.Group();
+  const type = blockType(bx, bz);
+  const originX = bx*BLOCK*CELL, originZ = bz*BLOCK*CELL;
+
+  // base grass pad — textured turf, tinted differently for parks vs. lawns
+  const padSize = BLOCK*CELL;
+  const grassShade = type==="park" ? 0x6FBE5E : 0x63A857;
+  const grassMat = materialGrass(grassShade);
+  grassMat.map = GRASS_TEX.clone(); grassMat.map.needsUpdate = true;
+  grassMat.map.repeat.set(padSize/5, padSize/5);
+  const grassMesh = new THREE.Mesh(new THREE.PlaneGeometry(padSize,padSize,1,1), grassMat);
+  grassMesh.rotation.x = -Math.PI/2;
+  grassMesh.position.set(originX+padSize/2, 0, originZ+padSize/2);
+  grassMesh.receiveShadow = true;
+  group.add(grassMesh);
+
+  if(type === "water"){
+    const wMesh = new THREE.Mesh(new THREE.PlaneGeometry(padSize*0.86,padSize*0.86,20,20), MAT_WATER);
+    wMesh.rotation.x = -Math.PI/2;
+    wMesh.position.set(originX+padSize/2, 0.03, originZ+padSize/2);
+    group.add(wMesh);
+    waterMeshes.push(wMesh);
+  }
+
+  if(type === "park"){
+    for(let i=0;i<7;i++){
+      const rx = originX + hash2(bx+i*1.7, bz)*padSize;
+      const rz = originZ + hash2(bx, bz+i*2.3)*padSize;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.15,1.1,6), new THREE.MeshStandardMaterial({color:0x6B4A2E}));
+      trunk.position.set(rx,0.55,rz); trunk.castShadow=true;
+      const leafClusters = 2 + Math.floor(hash2(rx,rz)*2);
+      for(let c=0;c<leafClusters;c++){
+        const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.65,8,7), new THREE.MeshStandardMaterial({color: c%2===0?0x3F8F4A:0x4FA857}));
+        leaves.position.set(rx + (c-leafClusters/2)*0.35, 1.45+c*0.18, rz + hash2(rx+c,rz)*0.3-0.15);
+        leaves.castShadow=true;
+        group.add(leaves);
+      }
+      group.add(trunk);
+    }
+  }
+
+  // roads: perimeter of block, with curbs and a textured surface
+  const roadW = 5;
+  [ [originX-roadW/2, originZ+padSize/2, roadW, padSize+roadW],
+    [originX+padSize+roadW/2, originZ+padSize/2, roadW, padSize+roadW],
+    [originX+padSize/2, originZ-roadW/2, padSize+roadW, roadW],
+    [originX+padSize/2, originZ+padSize+roadW/2, padSize+roadW, roadW]
+  ].forEach(([cx,cz,w,d])=>{
+    const roadMat = MAT_ROAD.clone();
+    roadMat.map = ROAD_TEX.clone(); roadMat.map.needsUpdate = true;
+    roadMat.map.repeat.set(w/3, d/3);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(w,d), roadMat);
+    road.rotation.x = -Math.PI/2; road.position.set(cx,0.02,cz); road.receiveShadow = true;
+    group.add(road);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(w<d?0.25:w*0.9, w<d?d*0.9:0.25), MAT_ROAD_LINE);
+    line.rotation.x = -Math.PI/2; line.position.set(cx,0.025,cz);
+    group.add(line);
+    const curbLong = w<d;
+    const curb1 = new THREE.Mesh(new THREE.BoxGeometry(curbLong?0.22:w+0.4, 0.08, curbLong?d+0.4:0.22), MAT_CURB);
+    curb1.position.set(cx + (curbLong? w/2+0.1 : 0), 0.04, cz + (curbLong? 0 : d/2+0.1));
+    group.add(curb1);
+    const curb2 = curb1.clone();
+    curb2.position.set(cx - (curbLong? w/2+0.1 : 0), 0.04, cz - (curbLong? 0 : d/2+0.1));
+    group.add(curb2);
+  });
+
+  if(type === "city"){
+    const lots = 4; // lots per side within block interior
+    const inner = padSize*0.72;
+    const lotSize = inner/lots;
+    const startO = originX + padSize*0.14;
+    const startZ = originZ + padSize*0.14;
+    for(let ix=0; ix<lots; ix++){
+      for(let iz=0; iz<lots; iz++){
+        const h = hash2(bx*20+ix*3.3, bz*20+iz*5.1);
+        if(h < 0.22) continue; // empty lot / yard
+        const lx = startO + ix*lotSize + lotSize/2;
+        const lz = startZ + iz*lotSize + lotSize/2;
+        const footprint = lotSize*0.62;
+        const floors = 1 + Math.floor(hash2(lx*0.13, lz*0.19)*6);
+        const height = floors * 2.6;
+        const color = BUILDING_PALETTE[Math.floor(hash2(lx,lz)*BUILDING_PALETTE.length)];
+        const texVariant = BUILDING_TEXES[Math.floor(hash2(lx+9,lz+9)*BUILDING_TEXES.length)];
+        const facadeTex = texVariant.clone(); facadeTex.needsUpdate = true;
+        facadeTex.repeat.set(Math.max(1,Math.round(footprint/3)), floors);
+        const bMat = new THREE.MeshStandardMaterial({map:facadeTex, color, roughness:0.88});
+        const bMesh = new THREE.Mesh(new THREE.BoxGeometry(footprint, height, footprint), bMat);
+        bMesh.position.set(lx, height/2, lz);
+        bMesh.castShadow = true; bMesh.receiveShadow = true;
+        group.add(bMesh);
+
+        // entrance door on the street-facing side
+        const door = new THREE.Mesh(new THREE.BoxGeometry(footprint*0.16, 0.55, 0.04), new THREE.MeshStandardMaterial({color:0x3A2A1E, roughness:0.7}));
+        door.position.set(lx, 0.28, lz+footprint/2+0.021);
+        group.add(door);
+
+        const isFlatRoof = floors >= 4 && hash2(lx-3,lz-3) < 0.5;
+        if(isFlatRoof){
+          const parapet = new THREE.Mesh(new THREE.BoxGeometry(footprint*1.04, 0.26, footprint*1.04), new THREE.MeshStandardMaterial({color:0x3A342C, roughness:0.9}));
+          parapet.position.set(lx, height+0.13, lz);
+          parapet.castShadow = true;
+          group.add(parapet);
+          const roofCap = new THREE.Mesh(new THREE.BoxGeometry(footprint*0.9, 0.05, footprint*0.9), new THREE.MeshStandardMaterial({color:0x55524A, roughness:0.95}));
+          roofCap.position.set(lx, height+0.03, lz);
+          group.add(roofCap);
+        } else {
+          const roofColor = ROOF_PALETTE[Math.floor(hash2(lx+2,lz+2)*ROOF_PALETTE.length)];
+          const roof = new THREE.Mesh(new THREE.ConeGeometry(footprint*0.78, footprint*0.55, 4), new THREE.MeshStandardMaterial({color:roofColor, roughness:0.8}));
+          roof.position.set(lx, height+footprint*0.27, lz);
+          roof.rotation.y = Math.PI/4;
+          roof.castShadow = true;
+          group.add(roof);
+        }
+      }
+    }
+  }
+
+  return group;
+}
+
+function refreshWorld(){
+  const pb = { x: Math.floor(playerWorldPos.x/(BLOCK*CELL)), z: Math.floor(playerWorldPos.z/(BLOCK*CELL)) };
+  const needed = new Set();
+  for(let dx=-VIEW_RADIUS; dx<=VIEW_RADIUS; dx++){
+    for(let dz=-VIEW_RADIUS; dz<=VIEW_RADIUS; dz++){
+      const bx = pb.x+dx, bz = pb.z+dz;
+      const key = cellKey(bx,bz);
+      needed.add(key);
+      if(!chunkCache.has(key)){
+        const chunk = buildChunk(bx,bz);
+        worldRoot.add(chunk);
+        chunkCache.set(key, chunk);
+      }
+    }
+  }
+  for(const [key, mesh] of chunkCache){
+    if(!needed.has(key)){
+      worldRoot.remove(mesh);
+      mesh.traverse(o=>{ if(o.geometry) o.geometry.dispose(); });
+      chunkCache.delete(key);
+      waterMeshes = waterMeshes.filter(w=> w.parent !== null);
+    }
+  }
+}
+
+/* ---- Animation loop ---- */
+let walkPhase = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+  MAT_WATER.uniforms.time.value = t;
+
+  const speedFactor = isWalking ? Math.min(1.6, 0.6+currentSpeedMps*0.6) : 0;
+  if(speedFactor>0){
+    walkPhase += dt*7*speedFactor;
+    const swing = Math.sin(walkPhase)*0.55;
+    const ud = avatarGroup.userData;
+    ud.hipL.rotation.x = swing;
+    ud.hipR.rotation.x = -swing;
+    ud.kneeL.rotation.x = Math.max(0, Math.sin(walkPhase + Math.PI*0.5)) * 0.95;
+    ud.kneeR.rotation.x = Math.max(0, Math.sin(walkPhase - Math.PI*0.5)) * 0.95;
+    ud.shoulderL.rotation.x = -swing*0.75;
+    ud.shoulderR.rotation.x = swing*0.75;
+    ud.elbowL.rotation.x = 0.18 + Math.max(0, Math.sin(walkPhase - Math.PI*0.5))*0.5;
+    ud.elbowR.rotation.x = 0.18 + Math.max(0, Math.sin(walkPhase + Math.PI*0.5))*0.5;
+    avatarGroup.position.y = Math.abs(Math.sin(walkPhase*2))*0.035;
+  } else {
+    const ud = avatarGroup.userData;
+    ud.hipL.rotation.x *= 0.85; ud.hipR.rotation.x *= 0.85;
+    ud.kneeL.rotation.x *= 0.85; ud.kneeR.rotation.x *= 0.85;
+    ud.shoulderL.rotation.x *= 0.85; ud.shoulderR.rotation.x *= 0.85;
+    ud.elbowL.rotation.x += (0.18 - ud.elbowL.rotation.x)*0.1;
+    ud.elbowR.rotation.x += (0.18 - ud.elbowR.rotation.x)*0.1;
+    avatarGroup.position.y *= 0.85;
+    avatarGroup.userData.head.rotation.y = Math.sin(t*0.4)*0.15;
+  }
+
+  // world scrolls opposite to player's accumulated local displacement,
+  // avatar always sits near local origin so long walks never lose precision
+  worldRoot.position.set(-playerWorldPos.x, 0, -playerWorldPos.z);
+  avatarGroup.rotation.y = headingRad;
+
+  if(camMode === 0){ // chase cam
+    const back = new THREE.Vector3(Math.sin(headingRad), 0, Math.cos(headingRad)).multiplyScalar(3.4);
+    const targetPos = new THREE.Vector3(avatarGroup.position.x + back.x, 2.15, avatarGroup.position.z + back.z);
+    camera.position.lerp(targetPos, 0.08);
+    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(headingRad)*6, 1.1, avatarGroup.position.z - Math.cos(headingRad)*6);
+    camera.lookAt(lookAt);
+  } else { // first person / street view
+    const fwd = new THREE.Vector3(-Math.sin(headingRad),0,-Math.cos(headingRad));
+    const eye = new THREE.Vector3(avatarGroup.position.x + fwd.x*0.15, 1.55, avatarGroup.position.z + fwd.z*0.15);
+    camera.position.lerp(eye, 0.35);
+    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(headingRad)*10, 1.5, avatarGroup.position.z - Math.cos(headingRad)*10);
+    camera.lookAt(lookAt);
+  }
+
+  renderer.render(scene, camera);
+}
+$("camToggle").onclick = ()=>{ camMode = (camMode+1)%2; $("camToggle").textContent = camMode===0 ? "🎥" : "👣"; };
+
+/* =========================================================================
+   GPS TRACKING
+========================================================================= */
+let watchId = null;
+let originLatLon = null;      // fixes local coordinate origin
+let lastFix = null;           // {lat,lon,t}
+let playerWorldPos = {x:0, z:0};
+let headingRad = 0;
+let isWalking = false;
+let currentSpeedMps = 0;
+let sessionStartMs = 0;
+let sessionSteps = 0;
+let sessionCalories = 0;
+let sessionDistance = 0;
+let hudTimer = null;
+let strideM = 0.75;
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000, toRad = Math.PI/180;
+  const dLat=(lat2-lat1)*toRad, dLon=(lon2-lon1)*toRad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function bearingRad(lat1,lon1,lat2,lon2){
+  const toRad = Math.PI/180;
+  const y = Math.sin((lon2-lon1)*toRad)*Math.cos(lat2*toRad);
+  const x = Math.cos(lat1*toRad)*Math.sin(lat2*toRad) - Math.sin(lat1*toRad)*Math.cos(lat2*toRad)*Math.cos((lon2-lon1)*toRad);
+  return Math.atan2(y,x); // radians, 0 = north
+}
+function project(lat, lon){
+  const R = 6371000, toRad = Math.PI/180;
+  const dLat = (lat-originLatLon.lat)*toRad;
+  const dLon = (lon-originLatLon.lon)*toRad;
+  const x = dLon*Math.cos(originLatLon.lat*toRad)*R;
+  const z = -dLat*R;
+  return {x,z};
+}
+
+function setGpsStatus(ok, text){
+  $("gpsDotIcon").className = "d " + (ok===true?"ok":ok===false?"bad":"");
+  $("gpsDotText").textContent = text;
+}
+
+function startGPS(){
+  if(!("geolocation" in navigator)){ setGpsStatus(false,"GPS not supported on this device"); return; }
+  setGpsStatus(null,"Locating GPS…");
+  watchId = navigator.geolocation.watchPosition(onGpsFix, onGpsError, {enableHighAccuracy:true, maximumAge:1000, timeout:15000});
+}
+function onGpsError(err){
+  setGpsStatus(false, "GPS unavailable — check location permission");
+}
+function onGpsFix(pos){
+  const {latitude:lat, longitude:lon, accuracy} = pos.coords;
+  const now = performance.now();
+
+  if(!originLatLon){
+    originLatLon = {lat, lon};
+    lastFix = {lat, lon, t:now};
+    setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
+    return;
+  }
+  setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
+
+  const dist = haversine(lastFix.lat, lastFix.lon, lat, lon);
+  const dtSec = Math.max(0.001, (now - lastFix.t)/1000);
+  const speed = dist/dtSec;
+
+  // filter GPS jitter and impossible jumps
+  if(dist < 0.9){ currentSpeedMps *= 0.7; lastFix = {lat,lon,t:now}; return; }
+  if(speed > 4.2){ lastFix = {lat,lon,t:now}; return; } // faster than ~15km/h -> ignore as noise/vehicle
+
+  headingRad = bearingRad(lastFix.lat, lastFix.lon, lat, lon);
+  currentSpeedMps = speed;
+  playerWorldPos = project(lat, lon);
+  isWalking = true;
+  clearTimeout(window.__idleTimer);
+  window.__idleTimer = setTimeout(()=>{ isWalking = false; currentSpeedMps=0; }, 2200);
+
+  if(sessionStartMs){
+    const stepsGained = dist/strideM;
+    sessionSteps += stepsGained;
+    sessionDistance += dist;
+    sessionCalories += stepsGained * (profile.weightKg * 0.0006);
+  }
+  lastFix = {lat, lon, t:now};
+  refreshWorld();
+}
+
+/* ---- Start / Stop session ---- */
+$("startBtn").onclick = ()=>{
+  if(!sessionStartMs){
+    sessionStartMs = Date.now();
+    sessionSteps = 0; sessionCalories = 0; sessionDistance = 0;
+    $("startBtn").textContent = "STOP";
+    $("startBtn").classList.add("walking");
+    $("walkToast").classList.add("hidden");
+    hudTimer = setInterval(updateHud, 500);
+  } else {
+    const elapsedSec = (Date.now()-sessionStartMs)/1000;
+    stats.totalSteps += Math.floor(sessionSteps);
+    stats.seasonSteps += Math.floor(sessionSteps);
+    stats.totalCalories += sessionCalories;
+    stats.totalDistanceM += sessionDistance;
+    stats.totalTimeSec += elapsedSec;
+    saveJSON(LS_STATS, stats);
+    syncMyLbEntry();
+    $("walkToast").textContent = `Nice walk! +${Math.floor(sessionSteps)} steps, +${Math.round(sessionCalories)} kcal`;
+    $("walkToast").classList.remove("hidden");
+    sessionStartMs = 0;
+    clearInterval(hudTimer);
+    $("startBtn").textContent = "START";
+    $("startBtn").classList.remove("walking");
+  }
+};
+function updateHud(){
+  const elapsed = sessionStartMs ? (Date.now()-sessionStartMs)/1000 : 0;
+  const mm = Math.floor(elapsed/60), ss = Math.floor(elapsed%60);
+  $("hudTime").textContent = mm+":"+String(ss).padStart(2,"0");
+  $("hudSteps").textContent = Math.floor(sessionSteps).toLocaleString();
+  $("hudCals").textContent = Math.round(sessionCalories).toLocaleString();
+}
+
+/* =========================================================================
+   BOOT
+========================================================================= */
+function enterGame(){
+  document.getElementById("authScreen").classList.remove("active");
+  document.getElementById("gameScreen").classList.add("active");
+  strideM = (profile.heightCm/100) * 0.413;
+  initThree();
+  startGPS();
+}
+
+if(profile){
+  ensureMyLbEntry();
+  enterGame();
+}
+
+})();
+</script>
+
+<script>
+/* ==========================================================================
+   PWA install + auto-update system
+   - sw.js precaches the app so it works offline and installs to your
+     home screen like a real app.
+   - When you push new files to GitHub, the browser notices sw.js (or any
+     cached file) changed, silently downloads the new version in the
+     background, and this script shows the "Update" banner. Tapping it
+     activates the new version and reloads the game.
+========================================================================== */
+(function(){
+  if(!("serviceWorker" in navigator)) return;
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    if(refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  function showUpdateBanner(reg){
+    const banner = document.getElementById("updateBanner");
+    banner.classList.remove("hidden");
+    document.getElementById("updateBtn").onclick = ()=>{
+      if(reg.waiting) reg.waiting.postMessage({type:"SKIP_WAITING"});
+      banner.classList.add("hidden");
+    };
+  }
+
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").then((reg)=>{
+      // a worker already waiting (e.g. you updated while the app was closed)
+      if(reg.waiting) showUpdateBanner(reg);
+
+      reg.addEventListener("updatefound", ()=>{
+        const fresh = reg.installing;
+        if(!fresh) return;
+        fresh.addEventListener("statechange", ()=>{
+          if(fresh.state === "installed" && navigator.serviceWorker.controller){
+            showUpdateBanner(reg);
+          }
+        });
+      });
+
+      // check for a new version every time the app is opened/resumed
+      document.addEventListener("visibilitychange", ()=>{
+        if(document.visibilityState === "visible") reg.update();
+      });
+    }).catch(()=>{ /* offline on first load or unsupported host — game still runs */ });
+  });
+})();
+</script>
+</body>
+</html>
