@@ -1351,11 +1351,11 @@ const OVERPASS_ENDPOINTS = [
 
 let lastMapError = "";
 async function tryLoadRealMapData(lat, lon){
-  const latSpan = 0.0032;
+  const latSpan = 0.005;
   const lonSpan = latSpan / Math.max(0.15, Math.cos(lat*Math.PI/180));
   const south=lat-latSpan, north=lat+latSpan, west=lon-lonSpan, east=lon+lonSpan;
   const bbox = `${south},${west},${north},${east}`;
-  const q = `[out:json][timeout:20];(way["building"](${bbox});way["highway"](${bbox});way["natural"="water"](${bbox});way["waterway"](${bbox});way["leisure"="park"](${bbox});way["landuse"~"grass|meadow|forest|recreation_ground|village_green"](${bbox}););out body;>;out skel qt;`;
+  const q = `[out:json][timeout:25];(way["building"](${bbox});node["building"](${bbox});way["highway"](${bbox});way["natural"="water"](${bbox});way["waterway"](${bbox});way["leisure"~"park|pitch|sports_centre|garden|golf_course"](${bbox});way["landuse"~"grass|meadow|forest|recreation_ground|village_green"](${bbox}););out body;>;out skel qt;`;
   lastMapError = "";
   for(const ep of OVERPASS_ENDPOINTS){
     const controller = new AbortController();
@@ -1455,7 +1455,7 @@ function buildRealWorld(osm, centerLat, centerLon){
         const width = parseFloat(tags.width) || 4;
         for(let i=0;i<pts.length-1;i++) addRibbonSegment(group, pts[i], pts[i+1], width, MAT_WATER, true);
         featureCount++;
-      } else if(closed && (tags.leisure==="park" || (tags.landuse && ["grass","meadow","forest","recreation_ground","village_green"].includes(tags.landuse)))){
+      } else if(closed && (["park","garden","golf_course"].includes(tags.leisure) || (tags.landuse && ["grass","meadow","forest","recreation_ground","village_green"].includes(tags.landuse)))){
         const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
         if(shapePts.length < 3) return;
         const geo = new THREE.ShapeGeometry(new THREE.Shape(shapePts));
@@ -1467,6 +1467,19 @@ function buildRealWorld(osm, centerLat, centerLon){
         mesh.receiveShadow = true;
         group.add(mesh);
         featureCount++;
+      } else if(closed && ["pitch","sports_centre"].includes(tags.leisure)){
+        // sports fields (baseball, soccer, etc.) — a distinct tan/infield tone
+        const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
+        if(shapePts.length < 3) return;
+        const geo = new THREE.ShapeGeometry(new THREE.Shape(shapePts));
+        const fMat = materialGrass(0x8FBE6A);
+        const tex = GRASS_TEX.clone(); tex.needsUpdate = true; tex.repeat.set(4,4);
+        fMat.map = tex;
+        const mesh = new THREE.Mesh(geo, fMat);
+        mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.006;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        featureCount++;
       } else if(tags.highway && !["proposed","construction"].includes(tags.highway)){
         const isFootway = ["footway","path","pedestrian","cycleway","steps"].includes(tags.highway);
         const width = isFootway ? 2 : 6;
@@ -1475,6 +1488,27 @@ function buildRealWorld(osm, centerLat, centerLon){
         featureCount++;
       }
     }catch(e){ /* skip any single malformed feature rather than failing the whole area */ }
+  });
+
+  // buildings mapped as a single point rather than an outlined shape
+  // (common for smaller/rural structures) — drawn as a simple house-sized box
+  osm.elements.forEach(el=>{
+    if(el.type!=="node" || !el.tags || !el.tags.building || buildingCount>=MAX_BUILDINGS) return;
+    try{
+      const p = project(el.lat, el.lon);
+      const footprint = 8, height = 5.5;
+      const color = BUILDING_PALETTE[Math.floor(hash2(p.x,p.z)*BUILDING_PALETTE.length)];
+      const tex = BUILDING_TEXES[Math.floor(hash2(p.x+5,p.z+5)*BUILDING_TEXES.length)].clone();
+      tex.needsUpdate = true; tex.repeat.set(2,2);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(footprint,height,footprint), new THREE.MeshStandardMaterial({map:tex,color,roughness:0.88}));
+      mesh.position.set(p.x, height/2, p.z);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(footprint*0.78, footprint*0.55, 4), new THREE.MeshStandardMaterial({color:0x5C7A85}));
+      roof.position.set(p.x, height+footprint*0.27, p.z);
+      roof.rotation.y = Math.PI/4;
+      group.add(mesh); group.add(roof);
+      buildingCount++; featureCount++;
+    }catch(e){}
   });
 
   return {group, featureCount};
@@ -1554,7 +1588,7 @@ function animate(){
   playerWorldPos.z += (targetWorldPos.z - playerWorldPos.z) * posLerp;
   let headingDelta = targetHeadingRad - headingRad;
   headingDelta = ((headingDelta + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI; // shortest turn direction
-  headingRad += headingDelta * Math.min(1, dt*4.5);
+  headingRad += headingDelta * Math.min(1, dt*3.2);
 
   // world scrolls opposite to player's accumulated local displacement,
   // avatar always sits near local origin so long walks never lose precision
@@ -1627,18 +1661,30 @@ let useCompassHeading = false;     // true once the phone's compass is driving t
 /* ---- compass: turn the character to face where the phone points, instead of
    only where GPS says you're moving (GPS bearing needs continuous walking in
    a line to mean anything; the compass works even standing still) ---- */
+let compassSmoothedDeg = null;
 function compassHandler(e){
   let deg = null;
   if(typeof e.webkitCompassHeading === "number"){
     deg = e.webkitCompassHeading; // iOS Safari: already a proper 0-360 compass bearing
-  } else if(e.alpha !== null && e.absolute){
-    deg = (360 - e.alpha) % 360; // Android absolute alpha runs the opposite way to compass bearing
   } else if(e.alpha !== null){
-    deg = (360 - e.alpha) % 360; // best-effort fallback if "absolute" wasn't flagged
+    deg = (360 - e.alpha) % 360; // Android alpha runs the opposite way to compass bearing
   }
   if(deg === null || isNaN(deg)) return;
+
+  // Phone compasses are noisy and get thrown off hard by magnetic interference
+  // (indoors especially — wiring, appliances, metal framing). Without heavy
+  // damping, that noise reads as the character spinning randomly. This keeps
+  // a running smoothed heading and heavily discounts any single sudden jump,
+  // so only a sustained real turn actually moves the character.
+  if(compassSmoothedDeg === null){ compassSmoothedDeg = deg; }
+  else{
+    let diff = deg - compassSmoothedDeg;
+    diff = ((diff + 180) % 360 + 360) % 360 - 180; // shortest direction, -180..180
+    const damping = Math.abs(diff) > 45 ? 0.02 : 0.10; // big sudden jumps barely move the average
+    compassSmoothedDeg = (compassSmoothedDeg + diff*damping + 360) % 360;
+  }
   useCompassHeading = true;
-  targetHeadingRad = deg * Math.PI/180;
+  targetHeadingRad = compassSmoothedDeg * Math.PI/180;
 }
 async function enableCompass(){
   try{
