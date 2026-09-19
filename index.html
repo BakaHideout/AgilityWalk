@@ -1344,22 +1344,36 @@ let realWorldCenter = null;
 let realWorldFetching = false;
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter"
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter"
 ];
 
+let lastMapError = "";
 async function tryLoadRealMapData(lat, lon){
   const latSpan = 0.0032;
   const lonSpan = latSpan / Math.max(0.15, Math.cos(lat*Math.PI/180));
   const south=lat-latSpan, north=lat+latSpan, west=lon-lonSpan, east=lon+lonSpan;
   const bbox = `${south},${west},${north},${east}`;
   const q = `[out:json][timeout:20];(way["building"](${bbox});way["highway"](${bbox});way["natural"="water"](${bbox});way["waterway"](${bbox});way["leisure"="park"](${bbox});way["landuse"~"grass|meadow|forest|recreation_ground|village_green"](${bbox}););out body;>;out skel qt;`;
+  lastMapError = "";
   for(const ep of OVERPASS_ENDPOINTS){
+    const controller = new AbortController();
+    const timer = setTimeout(()=> controller.abort(), 12000);
     try{
-      const res = await fetch(ep, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q)});
-      if(!res.ok) continue;
+      // plain GET with the query in the URL — a "simple request" with no
+      // custom headers, so it can never be blocked by a CORS preflight
+      const url = ep + "?data=" + encodeURIComponent(q);
+      const res = await fetch(url, {method:"GET", signal:controller.signal});
+      clearTimeout(timer);
+      if(!res.ok){ lastMapError = ep.replace("https://","").split("/")[0]+": HTTP "+res.status; continue; }
       const json = await res.json();
       if(json && Array.isArray(json.elements)) return json;
-    }catch(e){ /* blocked or offline — try next endpoint, else fall back below */ }
+      lastMapError = ep.replace("https://","").split("/")[0]+": empty response";
+    }catch(e){
+      clearTimeout(timer);
+      lastMapError = ep.replace("https://","").split("/")[0]+": "+(e && e.name==="AbortError" ? "timed out" : (e && e.message ? e.message : "network error"));
+    }
   }
   return null;
 }
@@ -1494,7 +1508,7 @@ async function refreshRealWorld(lat, lon){
   // servers are unreachable). Show plain ground — never invented buildings —
   // and keep retrying automatically until it succeeds.
   realWorldActive = false;
-  setGpsStatus(false, "Couldn't reach real map data — retrying… (tap to retry now)");
+  setGpsStatus(false, "Map data unreachable ("+(lastMapError||"unknown error")+") — retrying… tap to retry now");
   refreshWorld();
   clearTimeout(window.__realWorldRetry);
   window.__realWorldRetry = setTimeout(()=>{ if(!realWorldActive) refreshRealWorld(lat, lon); }, 15000);
