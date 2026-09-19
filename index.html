@@ -1304,30 +1304,28 @@ function buildChunk(bx, bz){
   return group;
 }
 
+let placeholderGround = null;
 function refreshWorld(){
-  if(realWorldActive) return; // real OpenStreetMap-derived scenery is showing instead — see buildRealWorld()
-  const pb = { x: Math.floor(playerWorldPos.x/(BLOCK*CELL)), z: Math.floor(playerWorldPos.z/(BLOCK*CELL)) };
-  const needed = new Set();
-  for(let dx=-VIEW_RADIUS; dx<=VIEW_RADIUS; dx++){
-    for(let dz=-VIEW_RADIUS; dz<=VIEW_RADIUS; dz++){
-      const bx = pb.x+dx, bz = pb.z+dz;
-      const key = cellKey(bx,bz);
-      needed.add(key);
-      if(!chunkCache.has(key)){
-        const chunk = buildChunk(bx,bz);
-        worldRoot.add(chunk);
-        chunkCache.set(key, chunk);
-      }
-    }
+  // This used to invent buildings/roads/water with a hash-based generator.
+  // That is exactly the "extra stuff" that doesn't belong here, so it has
+  // been removed outright rather than just guarded — it can no longer run.
+  // While real OpenStreetMap data is loading (or unreachable), show plain
+  // undecorated ground and nothing else.
+  if(realWorldActive) return;
+  if(!placeholderGround){
+    const size = 500;
+    const mat = materialGrass(0x6CAE5C);
+    const tex = GRASS_TEX.clone(); tex.needsUpdate = true; tex.repeat.set(size/6, size/6);
+    mat.map = tex;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    mesh.rotation.x = -Math.PI/2;
+    mesh.receiveShadow = true;
+    placeholderGround = new THREE.Group();
+    placeholderGround.add(mesh);
+    worldRoot.add(placeholderGround);
   }
-  for(const [key, mesh] of chunkCache){
-    if(!needed.has(key)){
-      worldRoot.remove(mesh);
-      mesh.traverse(o=>{ if(o.geometry) o.geometry.dispose(); });
-      chunkCache.delete(key);
-      waterMeshes = waterMeshes.filter(w=> w.parent !== null);
-    }
-  }
+  // keep the placeholder centered under the player as they move so it never runs out
+  placeholderGround.position.set(playerWorldPos.x, 0, playerWorldPos.z);
 }
 
 /* =========================================================================
@@ -1479,23 +1477,27 @@ async function refreshRealWorld(lat, lon){
     // A successful fetch is authoritative even if your area has very little
     // mapped — showing "mostly empty ground + the one river" is correct
     // behavior for a sparse area, so we never discard real data in favor of
-    // the fake generator just because it didn't find much.
+    // invented content just because it didn't find much.
     const built = buildRealWorld(osm, lat, lon);
     if(realWorldGroup){ worldRoot.remove(realWorldGroup); realWorldGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
-    for(const [key, mesh] of chunkCache){ worldRoot.remove(mesh); mesh.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+    if(placeholderGround){ worldRoot.remove(placeholderGround); placeholderGround.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); placeholderGround = null; }
     chunkCache.clear();
     realWorldGroup = built.group;
     worldRoot.add(realWorldGroup);
     realWorldActive = true;
     realWorldCenter = {lat, lon};
+    clearTimeout(window.__realWorldRetry);
     setGpsStatus(true, "GPS locked — showing your real map ("+built.featureCount+" real features nearby)");
     return;
   }
   // the fetch itself genuinely failed (blocked preview, offline, or the map
-  // servers are unreachable) — this is the ONLY case that falls back
+  // servers are unreachable). Show plain ground — never invented buildings —
+  // and keep retrying automatically until it succeeds.
   realWorldActive = false;
-  setGpsStatus(true, "GPS locked — real map unavailable, showing generated scenery");
+  setGpsStatus(false, "Couldn't reach real map data — retrying… (tap to retry now)");
   refreshWorld();
+  clearTimeout(window.__realWorldRetry);
+  window.__realWorldRetry = setTimeout(()=>{ if(!realWorldActive) refreshRealWorld(lat, lon); }, 15000);
 }
 
 /* ---- Animation loop ---- */
@@ -1703,7 +1705,10 @@ function startGPS(){
   }, 8000);
 }
 // tap the GPS pill to retry — useful after granting permission in phone settings
-document.getElementById("gpsDotText").parentElement.addEventListener("click", startGPS);
+document.getElementById("gpsDotText").parentElement.addEventListener("click", ()=>{
+  startGPS();
+  if(lastFix && !realWorldActive) refreshRealWorld(lastFix.lat, lastFix.lon);
+});
 
 function onGpsError(err){
   clearTimeout(window.__gpsWatchdog);

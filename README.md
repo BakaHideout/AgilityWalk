@@ -98,10 +98,16 @@ has the app installed will get the update prompt next time they open it.
   Maps) for the exact area around your GPS position, and only shows
   those. This does **not** work inside Claude's own artifact preview
   link (claude.ai) — that environment deliberately blocks the app from
-  reaching outside servers for security reasons, so it falls back to
-  generated scenery there instead. Your GitHub Pages copy has no such
-  restriction. If your area isn't well-mapped on OpenStreetMap yet, it
-  will also fall back to generated scenery for that spot.
+  reaching outside servers for security reasons, so it shows plain empty
+  ground there instead (never invented buildings). Your GitHub Pages
+  copy has no such restriction. The invented/generated scenery has been
+  removed entirely — if the real-map fetch fails or your area has
+  nothing mapped nearby, you'll see plain ground and the app will keep
+  retrying automatically, but it will never fabricate buildings, roads,
+  or lakes that aren't real. The status pill under the top stats tells
+  you exactly which state you're in: "loading your real map", "showing
+  your real map (N real features nearby)", or "couldn't reach real map
+  data — retrying" (tap it to force an immediate retry).
 - **If GPS/walking doesn't work:** this almost always means the app is
   being opened as a local file instead of through your `https://` GitHub
   Pages link. Phones only allow GPS access on a secure (https) address —
