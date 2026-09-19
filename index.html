@@ -1422,14 +1422,25 @@ function startGPS(){
     return;
   }
   if(!("geolocation" in navigator)){ setGpsStatus(false,"GPS not supported on this device"); return; }
-  setGpsStatus(null,"Locating GPS…");
+  let inFrame = false;
+  try{ inFrame = window.self !== window.top; }catch(e){ inFrame = true; }
+  setGpsStatus(null, inFrame ? "Locating GPS… (if this hangs, open this app's own link directly in your browser, not inside a preview)" : "Locating GPS…");
   if(watchId !== null){ navigator.geolocation.clearWatch(watchId); }
   watchId = navigator.geolocation.watchPosition(onGpsFix, onGpsError, {enableHighAccuracy:true, maximumAge:1000, timeout:15000});
+  // some embedded previews block geolocation outright without ever calling back —
+  // if we get neither a fix nor an error within a few seconds, say so explicitly
+  clearTimeout(window.__gpsWatchdog);
+  window.__gpsWatchdog = setTimeout(()=>{
+    if(!originLatLon){
+      setGpsStatus(false, "No GPS response yet. If you're viewing this inside a chat/preview window, open the app's own link directly in your phone's browser instead. Tap to retry.");
+    }
+  }, 8000);
 }
 // tap the GPS pill to retry — useful after granting permission in phone settings
 document.getElementById("gpsDotText").parentElement.addEventListener("click", startGPS);
 
 function onGpsError(err){
+  clearTimeout(window.__gpsWatchdog);
   let msg = "GPS unavailable. Tap to retry.";
   if(err && err.code === 1) msg = "Location permission denied — enable it for this app/site in your phone settings, then tap here.";
   else if(err && err.code === 2) msg = "Can't get a GPS fix right now — try moving outdoors, then tap here.";
@@ -1437,6 +1448,7 @@ function onGpsError(err){
   setGpsStatus(false, msg);
 }
 function onGpsFix(pos){
+  clearTimeout(window.__gpsWatchdog);
   const {latitude:lat, longitude:lon, accuracy} = pos.coords;
   const now = performance.now();
 
@@ -1514,7 +1526,12 @@ function enterGame(){
   document.getElementById("authScreen").classList.remove("active");
   document.getElementById("gameScreen").classList.add("active");
   strideM = (profile.heightCm/100) * 0.413;
-  initThree();
+  try{
+    initThree();
+  }catch(e){
+    console.error("3D scene failed to start:", e);
+    setGpsStatus(false, "Scene error: "+(e && e.message ? e.message : e));
+  }
   startGPS();
 }
 
