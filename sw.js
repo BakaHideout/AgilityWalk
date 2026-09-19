@@ -5,7 +5,7 @@
    detect an update, download it in the background, and let index.html
    show the "Update available" banner.
 ========================================================================== */
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v13";
 const CACHE_NAME = "agility-walk-" + CACHE_VERSION;
 
 const APP_SHELL = [

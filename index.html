@@ -1341,6 +1341,7 @@ function refreshWorld(){
 let realWorldActive = false;
 let realWorldGroup = null;
 let realWorldCenter = null;
+let realWorldFetchAccuracy = Infinity; // GPS accuracy (meters) of the fix the current real-map data was fetched for
 let realWorldFetching = false;
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -1401,6 +1402,7 @@ function buildRealWorld(osm, centerLat, centerLon){
   const ways = osm.elements.filter(el=> el.type==="way" && el.nodes && el.nodes.length>1);
   const group = new THREE.Group();
   let featureCount = 0, buildingCount = 0;
+  const counts = {buildings:0, roads:0, water:0, green:0};
   const MAX_BUILDINGS = 260;
 
   // real ground first — covers the whole fetched area so sparse spots (a
@@ -1442,7 +1444,7 @@ function buildRealWorld(osm, centerLat, centerLon){
         const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({map:tex, color, roughness:0.88}));
         mesh.castShadow = true; mesh.receiveShadow = true;
         group.add(mesh);
-        featureCount++;
+        featureCount++; counts.buildings++;
       } else if(tags.natural==="water" && closed){
         const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
         if(shapePts.length < 3) return;
@@ -1450,11 +1452,11 @@ function buildRealWorld(osm, centerLat, centerLon){
         const mesh = new THREE.Mesh(geo, MAT_WATER);
         mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.03;
         group.add(mesh); waterMeshes.push(mesh);
-        featureCount++;
+        featureCount++; counts.water++;
       } else if(tags.waterway){
         const width = parseFloat(tags.width) || 4;
         for(let i=0;i<pts.length-1;i++) addRibbonSegment(group, pts[i], pts[i+1], width, MAT_WATER, true);
-        featureCount++;
+        featureCount++; counts.water++;
       } else if(closed && (["park","garden","golf_course"].includes(tags.leisure) || (tags.landuse && ["grass","meadow","forest","recreation_ground","village_green"].includes(tags.landuse)))){
         const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
         if(shapePts.length < 3) return;
@@ -1466,7 +1468,7 @@ function buildRealWorld(osm, centerLat, centerLon){
         mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.005;
         mesh.receiveShadow = true;
         group.add(mesh);
-        featureCount++;
+        featureCount++; counts.green++;
       } else if(closed && ["pitch","sports_centre"].includes(tags.leisure)){
         // sports fields (baseball, soccer, etc.) — a distinct tan/infield tone
         const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
@@ -1479,13 +1481,13 @@ function buildRealWorld(osm, centerLat, centerLon){
         mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.006;
         mesh.receiveShadow = true;
         group.add(mesh);
-        featureCount++;
+        featureCount++; counts.green++;
       } else if(tags.highway && !["proposed","construction"].includes(tags.highway)){
         const isFootway = ["footway","path","pedestrian","cycleway","steps"].includes(tags.highway);
         const width = isFootway ? 2 : 6;
         const mat = isFootway ? MAT_CURB : MAT_ROAD;
         for(let i=0;i<pts.length-1;i++) addRibbonSegment(group, pts[i], pts[i+1], width, mat, false);
-        featureCount++;
+        featureCount++; counts.roads++;
       }
     }catch(e){ /* skip any single malformed feature rather than failing the whole area */ }
   });
@@ -1507,11 +1509,11 @@ function buildRealWorld(osm, centerLat, centerLon){
       roof.position.set(p.x, height+footprint*0.27, p.z);
       roof.rotation.y = Math.PI/4;
       group.add(mesh); group.add(roof);
-      buildingCount++; featureCount++;
+      buildingCount++; featureCount++; counts.buildings++;
     }catch(e){}
   });
 
-  return {group, featureCount};
+  return {group, featureCount, counts};
 }
 
 async function refreshRealWorld(lat, lon){
@@ -1535,7 +1537,7 @@ async function refreshRealWorld(lat, lon){
     realWorldActive = true;
     realWorldCenter = {lat, lon};
     clearTimeout(window.__realWorldRetry);
-    setGpsStatus(true, "GPS locked — showing your real map ("+built.featureCount+" real features nearby)");
+    setGpsStatus(true, "GPS locked — real map: "+built.counts.buildings+" buildings, "+built.counts.roads+" roads, "+built.counts.water+" water, "+built.counts.green+" parks/fields");
     return;
   }
   // the fetch itself genuinely failed (blocked preview, offline, or the map
@@ -1787,14 +1789,23 @@ function onGpsFix(pos){
     originLatLon = {lat, lon};
     lastFix = {lat, lon, t:now};
     setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
+    realWorldFetchAccuracy = accuracy;
     refreshRealWorld(lat, lon);
     return;
   }
   setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
 
-  if(realWorldCenter && !realWorldFetching){
-    const movedFromFetch = haversine(realWorldCenter.lat, realWorldCenter.lon, lat, lon);
-    if(movedFromFetch > 200) refreshRealWorld(lat, lon);
+  if(!realWorldFetching){
+    const movedFromFetch = realWorldCenter ? haversine(realWorldCenter.lat, realWorldCenter.lon, lat, lon) : Infinity;
+    // a phone's very first fix can be off by hundreds of meters (cell/WiFi
+    // positioning before GPS locks on); if a later fix is meaningfully more
+    // accurate, re-center the real-map search on it immediately rather than
+    // waiting for you to walk 200m away from the bad original spot
+    const accuracyImproved = accuracy < realWorldFetchAccuracy*0.6 && accuracy < 30;
+    if(movedFromFetch > 80 || accuracyImproved){
+      realWorldFetchAccuracy = accuracy;
+      refreshRealWorld(lat, lon);
+    }
   }
 
   const dist = haversine(lastFix.lat, lastFix.lon, lat, lon);
