@@ -100,6 +100,10 @@ canvas{display:block;width:100%;height:100%;}
 .stat-chip .l{font-size:9.5px;color:#B9D6CC;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;}
 .chip-row{display:flex;gap:8px;}
 .cam-btn{pointer-events:auto;width:40px;height:40px;border-radius:12px;background:rgba(15,35,31,0.72);border:1px solid rgba(255,255,255,0.14);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;}
+.cam-btn.on{background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#241905;border-color:var(--gold);}
+.look-controls{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);display:flex;justify-content:space-between;padding:0 10px;z-index:4;pointer-events:none;}
+.look-btn{pointer-events:auto;width:46px;height:64px;border-radius:16px;background:rgba(15,35,31,0.42);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-size:26px;display:flex;align-items:center;justify-content:center;}
+.look-btn:active{background:rgba(15,35,31,0.7);}
 .gps-dot{position:absolute;top:calc(64px + env(safe-area-inset-top));left:14px;right:70px;display:flex;align-items:center;gap:6px;font-size:11px;color:#BEDAD2;background:rgba(15,35,31,0.6);padding:5px 10px;border-radius:20px;z-index:5;cursor:pointer;}
 .gps-dot .d{width:7px;height:7px;border-radius:50%;background:#5B6963;}
 .gps-dot .d.ok{background:#57D08A;box-shadow:0 0 6px #57D08A;}
@@ -266,9 +270,17 @@ canvas{display:block;width:100%;height:100%;}
           <div class="stat-chip"><div class="v" id="hudSteps">0</div><div class="l">Steps</div></div>
           <div class="stat-chip"><div class="v" id="hudCals">0</div><div class="l">Kcal</div></div>
         </div>
-        <button class="cam-btn" id="camToggle">🎥</button>
+        <div class="chip-row">
+          <button class="cam-btn" id="compassToggle" title="Turn with your phone">🧭</button>
+          <button class="cam-btn" id="camToggle">🎥</button>
+        </div>
       </div>
       <div class="gps-dot"><div class="d" id="gpsDotIcon"></div><span id="gpsDotText">Locating GPS…</span></div>
+
+      <div class="look-controls">
+        <button class="look-btn" id="lookLeftBtn">‹</button>
+        <button class="look-btn" id="lookRightBtn">›</button>
+      </div>
 
       <div class="walk-toast hidden" id="walkToast"></div>
 
@@ -1533,23 +1545,56 @@ function animate(){
   worldRoot.position.set(-playerWorldPos.x, 0, -playerWorldPos.z);
   avatarGroup.rotation.y = headingRad;
 
+  // camera can look left/right independently of the character's facing —
+  // auto-recenters behind the character after a couple seconds of no input
+  if(performance.now() - lastLookInputT > 2200){
+    camYawOffset *= Math.max(0, 1 - dt*2.2);
+  }
+  const viewHeading = headingRad + camYawOffset;
+
   if(camMode === 0){ // chase cam
-    const back = new THREE.Vector3(Math.sin(headingRad), 0, Math.cos(headingRad)).multiplyScalar(3.4);
+    const back = new THREE.Vector3(Math.sin(viewHeading), 0, Math.cos(viewHeading)).multiplyScalar(3.4);
     const targetPos = new THREE.Vector3(avatarGroup.position.x + back.x, 2.15, avatarGroup.position.z + back.z);
-    camera.position.lerp(targetPos, 0.08);
-    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(headingRad)*6, 1.1, avatarGroup.position.z - Math.cos(headingRad)*6);
+    camera.position.lerp(targetPos, 0.12);
+    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(viewHeading)*6, 1.1, avatarGroup.position.z - Math.cos(viewHeading)*6);
     camera.lookAt(lookAt);
   } else { // first person / street view
     const fwd = new THREE.Vector3(-Math.sin(headingRad),0,-Math.cos(headingRad));
     const eye = new THREE.Vector3(avatarGroup.position.x + fwd.x*0.15, 1.55, avatarGroup.position.z + fwd.z*0.15);
     camera.position.lerp(eye, 0.35);
-    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(headingRad)*10, 1.5, avatarGroup.position.z - Math.cos(headingRad)*10);
+    const lookAt = new THREE.Vector3(avatarGroup.position.x - Math.sin(viewHeading)*10, 1.5, avatarGroup.position.z - Math.cos(viewHeading)*10);
     camera.lookAt(lookAt);
   }
 
   renderer.render(scene, camera);
 }
 $("camToggle").onclick = ()=>{ camMode = (camMode+1)%2; $("camToggle").textContent = camMode===0 ? "🎥" : "👣"; };
+
+/* ---- look left/right: drag on the 3D view, or tap the ‹ › buttons ---- */
+let camYawOffset = 0;
+let lastLookInputT = 0;
+function nudgeLook(deltaRad){
+  camYawOffset += deltaRad;
+  lastLookInputT = performance.now();
+}
+$("lookLeftBtn").addEventListener("click", ()=> nudgeLook(-0.5));
+$("lookRightBtn").addEventListener("click", ()=> nudgeLook(0.5));
+
+(function setupDragLook(){
+  let dragging = false, lastX = 0;
+  const el = document.getElementById("canvasWrap");
+  const start = (x)=>{ dragging = true; lastX = x; };
+  const move = (x)=>{
+    if(!dragging) return;
+    const dx = x - lastX; lastX = x;
+    nudgeLook(-dx * 0.006);
+  };
+  const end = ()=>{ dragging = false; };
+  el.addEventListener("pointerdown", (e)=>{ start(e.clientX); });
+  el.addEventListener("pointermove", (e)=>{ move(e.clientX); });
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+})();
 
 /* =========================================================================
    GPS TRACKING
@@ -1561,6 +1606,47 @@ let playerWorldPos = {x:0, z:0};   // smoothly-interpolated position actually us
 let targetWorldPos = {x:0, z:0};   // latest raw position derived from GPS
 let headingRad = 0;                // smoothly-interpolated heading actually used for rendering
 let targetHeadingRad = 0;          // latest raw heading derived from GPS
+let useCompassHeading = false;     // true once the phone's compass is driving the character's facing
+
+/* ---- compass: turn the character to face where the phone points, instead of
+   only where GPS says you're moving (GPS bearing needs continuous walking in
+   a line to mean anything; the compass works even standing still) ---- */
+function compassHandler(e){
+  let deg = null;
+  if(typeof e.webkitCompassHeading === "number"){
+    deg = e.webkitCompassHeading; // iOS Safari: already a proper 0-360 compass bearing
+  } else if(e.alpha !== null && e.absolute){
+    deg = (360 - e.alpha) % 360; // Android absolute alpha runs the opposite way to compass bearing
+  } else if(e.alpha !== null){
+    deg = (360 - e.alpha) % 360; // best-effort fallback if "absolute" wasn't flagged
+  }
+  if(deg === null || isNaN(deg)) return;
+  useCompassHeading = true;
+  targetHeadingRad = deg * Math.PI/180;
+}
+async function enableCompass(){
+  try{
+    if(typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
+      const res = await DeviceOrientationEvent.requestPermission(); // iOS 13+ needs an explicit tap-triggered request
+      if(res !== "granted"){ $("compassToggle").title = "Compass permission denied"; return; }
+    }
+    window.addEventListener("deviceorientationabsolute", compassHandler);
+    window.addEventListener("deviceorientation", compassHandler);
+    $("compassToggle").classList.add("on");
+  }catch(e){
+    $("compassToggle").title = "Compass unavailable on this device";
+  }
+}
+$("compassToggle").onclick = ()=>{
+  if(useCompassHeading){
+    useCompassHeading = false;
+    window.removeEventListener("deviceorientationabsolute", compassHandler);
+    window.removeEventListener("deviceorientation", compassHandler);
+    $("compassToggle").classList.remove("on");
+  } else {
+    enableCompass();
+  }
+};
 let isWalking = false;
 let currentSpeedMps = 0;
 let sessionStartMs = 0;
@@ -1654,7 +1740,7 @@ function onGpsFix(pos){
   if(dist < 0.9){ currentSpeedMps *= 0.7; lastFix = {lat,lon,t:now}; return; }
   if(speed > 4.2){ lastFix = {lat,lon,t:now}; return; } // faster than ~15km/h -> ignore as noise/vehicle
 
-  targetHeadingRad = bearingRad(lastFix.lat, lastFix.lon, lat, lon);
+  if(!useCompassHeading) targetHeadingRad = bearingRad(lastFix.lat, lastFix.lon, lat, lon);
   currentSpeedMps = speed;
   targetWorldPos = project(lat, lon);
   isWalking = true;
