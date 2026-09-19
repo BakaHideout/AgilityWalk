@@ -92,6 +92,17 @@ has the app installed will get the update prompt next time they open it.
 
 ## Notes
 
+- **If GPS/walking doesn't work:** this almost always means the app is
+  being opened as a local file instead of through your `https://` GitHub
+  Pages link. Phones only allow GPS access on a secure (https) address —
+  opening `index.html` directly from downloads/files will show a
+  "GPS needs HTTPS" message and the character won't move. Make sure
+  you completed step 2 (GitHub Pages) and are opening the
+  `https://yourusername.github.io/...` link, not a local file. Also make
+  sure you tapped "Allow" when your phone asked for location permission;
+  the status pill under the top stats is tappable and will tell you the
+  specific reason (permission denied, no fix yet, etc.) if it's red —
+  tap it to retry after fixing.
 - This app needs a real GPS signal outdoors — indoor/desktop GPS is
   usually too inaccurate to walk the character.
 - Leaderboard, chat and friends currently store data locally on each

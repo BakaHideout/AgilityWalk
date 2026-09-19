@@ -100,7 +100,7 @@ canvas{display:block;width:100%;height:100%;}
 .stat-chip .l{font-size:9.5px;color:#B9D6CC;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;}
 .chip-row{display:flex;gap:8px;}
 .cam-btn{pointer-events:auto;width:40px;height:40px;border-radius:12px;background:rgba(15,35,31,0.72);border:1px solid rgba(255,255,255,0.14);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;}
-.gps-dot{position:absolute;top:calc(64px + env(safe-area-inset-top));left:14px;display:flex;align-items:center;gap:6px;font-size:11px;color:#BEDAD2;background:rgba(15,35,31,0.6);padding:5px 10px;border-radius:20px;z-index:5;}
+.gps-dot{position:absolute;top:calc(64px + env(safe-area-inset-top));left:14px;right:70px;display:flex;align-items:center;gap:6px;font-size:11px;color:#BEDAD2;background:rgba(15,35,31,0.6);padding:5px 10px;border-radius:20px;z-index:5;cursor:pointer;}
 .gps-dot .d{width:7px;height:7px;border-radius:50%;background:#5B6963;}
 .gps-dot .d.ok{background:#57D08A;box-shadow:0 0 6px #57D08A;}
 .gps-dot .d.bad{background:var(--danger);}
@@ -879,14 +879,10 @@ function buildCharacter(gender){
   const headY = neck.position.y + 0.115;
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.135,32,26), matSkin);
   head.position.y = headY;
-  head.scale.set(0.9,1.02,0.94);
+  head.scale.set(0.9,1.0,0.94);
   head.castShadow = true;
   outline(head, 1.05);
   g.add(head);
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.1,20,16), matSkin);
-  jaw.position.set(0, headY-0.08, 0.018);
-  jaw.scale.set(0.9,0.55,0.85);
-  g.add(jaw);
 
   // ---- big stylized anime eyes ----
   [-1,1].forEach(side=>{
@@ -924,11 +920,21 @@ function buildCharacter(gender){
   g.add(lip);
 
   // ---- hair (spiky for him, long streaked ponytail for her) ----
+  // ---- hair: a back/side shell whose geometry is cut so it is mathematically
+  // impossible for it to cover the front of the face, instead of guessing at sizes ----
+  const FACE_GAP = 1.05; // radians of open space centered on straight-ahead (~120° total)
+  function hairShell(radius, thetaLen, material){
+    const geo = new THREE.SphereGeometry(radius, 20, 14, Math.PI/2+FACE_GAP, Math.PI*2-2*FACE_GAP, 0, thetaLen);
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, material);
+    m.castShadow = true;
+    return m;
+  }
+
   if(isF){
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.14,20,16), matHair);
-    cap.scale.set(1.02,1.1,1.05);
-    cap.position.set(0, headY+0.02, -0.005);
-    outline(cap,1.05);
+    const cap = hairShell(0.145, 2.15, matHair);
+    cap.position.set(0, headY, 0);
+    outline(cap,1.04);
     g.add(cap);
     const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.13,16,12,0,Math.PI*2,0,Math.PI*0.4), matHair);
     fringe.position.set(0, headY+0.075, 0.02);
@@ -951,18 +957,18 @@ function buildCharacter(gender){
     const streak = new THREE.Mesh(new THREE.TubeGeometry(streakCurve, 10, 0.014, 6, false), matHairStreak);
     g.add(streak);
   } else {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.128,18,14), matHair);
-    cap.scale.set(1.02,0.7,1.02);
-    cap.position.set(0, headY+0.03, -0.006);
-    outline(cap,1.06);
+    const cap = hairShell(0.135, 1.9, matHair);
+    cap.position.set(0, headY+0.01, 0);
+    outline(cap,1.05);
     g.add(cap);
-    // a few tufts peeking out from under the back/sides of the cap (front stays clear under the brim)
+    // a few tufts peeking out from the back half only — angles kept far from
+    // the front (90°) so they can never read as covering the brow/eyes
     for(let i=0;i<5;i++){
-      const ang = Math.PI*0.55 + (i/4)*Math.PI*0.9; // back hemisphere only
-      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.026,0.09,6), i===2?matHairStreak:matHair);
-      spike.position.set(Math.cos(ang)*0.1, headY+0.055, Math.sin(ang)*0.1);
+      const ang = Math.PI*(140 + i*45)/180;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.024,0.085,6), i===2?matHairStreak:matHair);
+      spike.position.set(Math.cos(ang)*0.11, headY+0.03, Math.sin(ang)*0.11);
       spike.rotation.z = Math.cos(ang)*0.9;
-      spike.rotation.x = 1.1 + Math.sin(ang)*0.3;
+      spike.rotation.x = 1.2 + Math.sin(ang)*0.3;
       g.add(spike);
     }
   }
@@ -1411,12 +1417,24 @@ function setGpsStatus(ok, text){
 }
 
 function startGPS(){
+  if(!window.isSecureContext){
+    setGpsStatus(false, "GPS needs HTTPS — open this app via your https:// link, not a local file. Tap to retry.");
+    return;
+  }
   if(!("geolocation" in navigator)){ setGpsStatus(false,"GPS not supported on this device"); return; }
   setGpsStatus(null,"Locating GPS…");
+  if(watchId !== null){ navigator.geolocation.clearWatch(watchId); }
   watchId = navigator.geolocation.watchPosition(onGpsFix, onGpsError, {enableHighAccuracy:true, maximumAge:1000, timeout:15000});
 }
+// tap the GPS pill to retry — useful after granting permission in phone settings
+document.getElementById("gpsDotText").parentElement.addEventListener("click", startGPS);
+
 function onGpsError(err){
-  setGpsStatus(false, "GPS unavailable — check location permission");
+  let msg = "GPS unavailable. Tap to retry.";
+  if(err && err.code === 1) msg = "Location permission denied — enable it for this app/site in your phone settings, then tap here.";
+  else if(err && err.code === 2) msg = "Can't get a GPS fix right now — try moving outdoors, then tap here.";
+  else if(err && err.code === 3) msg = "GPS timed out — tap here to retry.";
+  setGpsStatus(false, msg);
 }
 function onGpsFix(pos){
   const {latitude:lat, longitude:lon, accuracy} = pos.coords;
@@ -1509,25 +1527,14 @@ if(profile){
 </script>
 
 <script>
-/* ==========================================================================
-   PWA install + auto-update system
-   - sw.js precaches the app so it works offline and installs to your
-     home screen like a real app.
-   - When you push new files to GitHub, the browser notices sw.js (or any
-     cached file) changed, silently downloads the new version in the
-     background, and this script shows the "Update" banner. Tapping it
-     activates the new version and reloads the game.
-========================================================================== */
 (function(){
   if(!("serviceWorker" in navigator)) return;
-
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", ()=>{
     if(refreshing) return;
     refreshing = true;
     window.location.reload();
   });
-
   function showUpdateBanner(reg){
     const banner = document.getElementById("updateBanner");
     banner.classList.remove("hidden");
@@ -1536,12 +1543,9 @@ if(profile){
       banner.classList.add("hidden");
     };
   }
-
   window.addEventListener("load", ()=>{
     navigator.serviceWorker.register("sw.js").then((reg)=>{
-      // a worker already waiting (e.g. you updated while the app was closed)
       if(reg.waiting) showUpdateBanner(reg);
-
       reg.addEventListener("updatefound", ()=>{
         const fresh = reg.installing;
         if(!fresh) return;
@@ -1551,12 +1555,10 @@ if(profile){
           }
         });
       });
-
-      // check for a new version every time the app is opened/resumed
       document.addEventListener("visibilitychange", ()=>{
         if(document.visibilityState === "visible") reg.update();
       });
-    }).catch(()=>{ /* offline on first load or unsupported host — game still runs */ });
+    }).catch(()=>{});
   });
 })();
 </script>
