@@ -1293,6 +1293,7 @@ function buildChunk(bx, bz){
 }
 
 function refreshWorld(){
+  if(realWorldActive) return; // real OpenStreetMap-derived scenery is showing instead — see buildRealWorld()
   const pb = { x: Math.floor(playerWorldPos.x/(BLOCK*CELL)), z: Math.floor(playerWorldPos.z/(BLOCK*CELL)) };
   const needed = new Set();
   for(let dx=-VIEW_RADIUS; dx<=VIEW_RADIUS; dx++){
@@ -1315,6 +1316,174 @@ function refreshWorld(){
       waterMeshes = waterMeshes.filter(w=> w.parent !== null);
     }
   }
+}
+
+/* =========================================================================
+   REAL MAP DATA (OpenStreetMap via the Overpass API — not Google Maps).
+   This only works once this page is hosted on your own domain (e.g. GitHub
+   Pages): Claude's own artifact preview blocks outbound requests to
+   anything except a few script CDNs, so on claude.ai this fetch fails
+   (by design, not a bug) and the game quietly falls back to the generated
+   scenery above. On your own GitHub Pages link there is no such
+   restriction, so real building footprints, roads, water and parks near
+   your GPS position load and replace the generated ones entirely.
+========================================================================= */
+let realWorldActive = false;
+let realWorldGroup = null;
+let realWorldCenter = null;
+let realWorldFetching = false;
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter"
+];
+
+async function tryLoadRealMapData(lat, lon){
+  const latSpan = 0.0032;
+  const lonSpan = latSpan / Math.max(0.15, Math.cos(lat*Math.PI/180));
+  const south=lat-latSpan, north=lat+latSpan, west=lon-lonSpan, east=lon+lonSpan;
+  const bbox = `${south},${west},${north},${east}`;
+  const q = `[out:json][timeout:20];(way["building"](${bbox});way["highway"](${bbox});way["natural"="water"](${bbox});way["waterway"](${bbox});way["leisure"="park"](${bbox});way["landuse"~"grass|meadow|forest|recreation_ground|village_green"](${bbox}););out body;>;out skel qt;`;
+  for(const ep of OVERPASS_ENDPOINTS){
+    try{
+      const res = await fetch(ep, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q)});
+      if(!res.ok) continue;
+      const json = await res.json();
+      if(json && Array.isArray(json.elements)) return json;
+    }catch(e){ /* blocked or offline — try next endpoint, else fall back below */ }
+  }
+  return null;
+}
+
+function addRibbonSegment(group, a, b, width, material, isWater){
+  const dx=b.x-a.x, dz=b.z-a.z;
+  const len = Math.hypot(dx,dz);
+  if(len < 0.05) return;
+  const nx = -dz/len, nz = dx/len, hw = width/2;
+  const y = isWater ? 0.03 : 0.02;
+  const p1=[a.x+nx*hw,y,a.z+nz*hw], p2=[a.x-nx*hw,y,a.z-nz*hw], p3=[b.x-nx*hw,y,b.z-nz*hw], p4=[b.x+nx*hw,y,b.z+nz*hw];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array([...p1,...p2,...p3, ...p1,...p3,...p4]), 3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0,0, 1,0, 1,Math.max(1,len/6),  0,0, 1,Math.max(1,len/6), 0,Math.max(1,len/6)]), 2));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  if(isWater) waterMeshes.push(mesh);
+}
+
+function buildRealWorld(osm, centerLat, centerLon){
+  const nodes = {};
+  osm.elements.forEach(el=>{ if(el.type==="node") nodes[el.id]=el; });
+  const ways = osm.elements.filter(el=> el.type==="way" && el.nodes && el.nodes.length>1);
+  const group = new THREE.Group();
+  let featureCount = 0, buildingCount = 0;
+  const MAX_BUILDINGS = 260;
+
+  // real ground first — covers the whole fetched area so sparse spots (a
+  // couple of houses, one river) still have real terrain to walk on instead
+  // of empty void
+  const centerProj = project(centerLat, centerLon);
+  const groundSize = 780;
+  const groundMat = materialGrass(0x6CAE5C);
+  const gTex = GRASS_TEX.clone(); gTex.needsUpdate = true; gTex.repeat.set(groundSize/6, groundSize/6);
+  groundMat.map = gTex;
+  const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), groundMat);
+  groundMesh.rotation.x = -Math.PI/2;
+  groundMesh.position.set(centerProj.x, -0.01, centerProj.z);
+  groundMesh.receiveShadow = true;
+  group.add(groundMesh);
+
+  ways.forEach(way=>{
+    const tags = way.tags || {};
+    const rawPts = way.nodes.map(id=>nodes[id]).filter(Boolean);
+    if(rawPts.length < 2) return;
+    const pts = rawPts.map(n=> project(n.lat, n.lon));
+    const closed = rawPts.length>2 && way.nodes[0]===way.nodes[way.nodes.length-1];
+
+    try{
+      if(tags.building && closed && buildingCount < MAX_BUILDINGS){
+        const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x, -p.z));
+        if(shapePts.length < 3) return;
+        buildingCount++;
+        const shape = new THREE.Shape(shapePts);
+        const levels = parseInt(tags["building:levels"]);
+        const heightTag = parseFloat(tags.height);
+        const height = heightTag || (levels ? levels*3 : (2.6+hash2(pts[0].x,pts[0].z)*8));
+        const geo = new THREE.ExtrudeGeometry(shape, {depth:height, bevelEnabled:false});
+        geo.rotateX(-Math.PI/2);
+        const color = BUILDING_PALETTE[Math.floor(hash2(pts[0].x,pts[0].z)*BUILDING_PALETTE.length)];
+        const texVariant = BUILDING_TEXES[Math.floor(hash2(pts[0].x+5,pts[0].z+5)*BUILDING_TEXES.length)];
+        const tex = texVariant.clone(); tex.needsUpdate = true;
+        tex.repeat.set(2, Math.max(1,Math.round(height/2.8)));
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({map:tex, color, roughness:0.88}));
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        group.add(mesh);
+        featureCount++;
+      } else if(tags.natural==="water" && closed){
+        const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
+        if(shapePts.length < 3) return;
+        const geo = new THREE.ShapeGeometry(new THREE.Shape(shapePts));
+        const mesh = new THREE.Mesh(geo, MAT_WATER);
+        mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.03;
+        group.add(mesh); waterMeshes.push(mesh);
+        featureCount++;
+      } else if(tags.waterway){
+        const width = parseFloat(tags.width) || 4;
+        for(let i=0;i<pts.length-1;i++) addRibbonSegment(group, pts[i], pts[i+1], width, MAT_WATER, true);
+        featureCount++;
+      } else if(closed && (tags.leisure==="park" || (tags.landuse && ["grass","meadow","forest","recreation_ground","village_green"].includes(tags.landuse)))){
+        const shapePts = pts.slice(0,-1).map(p=> new THREE.Vector2(p.x,-p.z));
+        if(shapePts.length < 3) return;
+        const geo = new THREE.ShapeGeometry(new THREE.Shape(shapePts));
+        const gMat = materialGrass(0x6FBE5E);
+        const tex = GRASS_TEX.clone(); tex.needsUpdate = true; tex.repeat.set(6,6);
+        gMat.map = tex;
+        const mesh = new THREE.Mesh(geo, gMat);
+        mesh.rotation.x = -Math.PI/2; mesh.position.y = 0.005;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        featureCount++;
+      } else if(tags.highway && !["proposed","construction"].includes(tags.highway)){
+        const isFootway = ["footway","path","pedestrian","cycleway","steps"].includes(tags.highway);
+        const width = isFootway ? 2 : 6;
+        const mat = isFootway ? MAT_CURB : MAT_ROAD;
+        for(let i=0;i<pts.length-1;i++) addRibbonSegment(group, pts[i], pts[i+1], width, mat, false);
+        featureCount++;
+      }
+    }catch(e){ /* skip any single malformed feature rather than failing the whole area */ }
+  });
+
+  return {group, featureCount};
+}
+
+async function refreshRealWorld(lat, lon){
+  if(realWorldFetching) return;
+  realWorldFetching = true;
+  setGpsStatus(true, "GPS locked — loading your real map…");
+  const osm = await tryLoadRealMapData(lat, lon);
+  realWorldFetching = false;
+
+  if(osm){
+    // A successful fetch is authoritative even if your area has very little
+    // mapped — showing "mostly empty ground + the one river" is correct
+    // behavior for a sparse area, so we never discard real data in favor of
+    // the fake generator just because it didn't find much.
+    const built = buildRealWorld(osm, lat, lon);
+    if(realWorldGroup){ worldRoot.remove(realWorldGroup); realWorldGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+    for(const [key, mesh] of chunkCache){ worldRoot.remove(mesh); mesh.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+    chunkCache.clear();
+    realWorldGroup = built.group;
+    worldRoot.add(realWorldGroup);
+    realWorldActive = true;
+    realWorldCenter = {lat, lon};
+    setGpsStatus(true, "GPS locked — showing your real map ("+built.featureCount+" real features nearby)");
+    return;
+  }
+  // the fetch itself genuinely failed (blocked preview, offline, or the map
+  // servers are unreachable) — this is the ONLY case that falls back
+  realWorldActive = false;
+  setGpsStatus(true, "GPS locked — real map unavailable, showing generated scenery");
+  refreshWorld();
 }
 
 /* ---- Animation loop ---- */
@@ -1350,6 +1519,15 @@ function animate(){
     avatarGroup.userData.head.rotation.y = Math.sin(t*0.4)*0.15;
   }
 
+  // smoothly glide toward the latest GPS reading every frame (GPS itself only
+  // updates every 1-5s; without this the world/character visibly teleport)
+  const posLerp = Math.min(1, dt*3.2);
+  playerWorldPos.x += (targetWorldPos.x - playerWorldPos.x) * posLerp;
+  playerWorldPos.z += (targetWorldPos.z - playerWorldPos.z) * posLerp;
+  let headingDelta = targetHeadingRad - headingRad;
+  headingDelta = ((headingDelta + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI; // shortest turn direction
+  headingRad += headingDelta * Math.min(1, dt*4.5);
+
   // world scrolls opposite to player's accumulated local displacement,
   // avatar always sits near local origin so long walks never lose precision
   worldRoot.position.set(-playerWorldPos.x, 0, -playerWorldPos.z);
@@ -1379,8 +1557,10 @@ $("camToggle").onclick = ()=>{ camMode = (camMode+1)%2; $("camToggle").textConte
 let watchId = null;
 let originLatLon = null;      // fixes local coordinate origin
 let lastFix = null;           // {lat,lon,t}
-let playerWorldPos = {x:0, z:0};
-let headingRad = 0;
+let playerWorldPos = {x:0, z:0};   // smoothly-interpolated position actually used for rendering
+let targetWorldPos = {x:0, z:0};   // latest raw position derived from GPS
+let headingRad = 0;                // smoothly-interpolated heading actually used for rendering
+let targetHeadingRad = 0;          // latest raw heading derived from GPS
 let isWalking = false;
 let currentSpeedMps = 0;
 let sessionStartMs = 0;
@@ -1456,9 +1636,15 @@ function onGpsFix(pos){
     originLatLon = {lat, lon};
     lastFix = {lat, lon, t:now};
     setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
+    refreshRealWorld(lat, lon);
     return;
   }
   setGpsStatus(true, accuracy < 20 ? "GPS locked" : "GPS locked (low accuracy: "+Math.round(accuracy)+"m)");
+
+  if(realWorldCenter && !realWorldFetching){
+    const movedFromFetch = haversine(realWorldCenter.lat, realWorldCenter.lon, lat, lon);
+    if(movedFromFetch > 200) refreshRealWorld(lat, lon);
+  }
 
   const dist = haversine(lastFix.lat, lastFix.lon, lat, lon);
   const dtSec = Math.max(0.001, (now - lastFix.t)/1000);
@@ -1468,9 +1654,9 @@ function onGpsFix(pos){
   if(dist < 0.9){ currentSpeedMps *= 0.7; lastFix = {lat,lon,t:now}; return; }
   if(speed > 4.2){ lastFix = {lat,lon,t:now}; return; } // faster than ~15km/h -> ignore as noise/vehicle
 
-  headingRad = bearingRad(lastFix.lat, lastFix.lon, lat, lon);
+  targetHeadingRad = bearingRad(lastFix.lat, lastFix.lon, lat, lon);
   currentSpeedMps = speed;
-  playerWorldPos = project(lat, lon);
+  targetWorldPos = project(lat, lon);
   isWalking = true;
   clearTimeout(window.__idleTimer);
   window.__idleTimer = setTimeout(()=>{ isWalking = false; currentSpeedMps=0; }, 2200);

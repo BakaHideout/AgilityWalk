@@ -92,6 +92,16 @@ has the app installed will get the update prompt next time they open it.
 
 ## Notes
 
+- **Real map data:** once this is hosted on your own GitHub Pages link,
+  the game fetches real building footprints, roads, water, and parks
+  from OpenStreetMap (a free, community-mapped dataset — not Google
+  Maps) for the exact area around your GPS position, and only shows
+  those. This does **not** work inside Claude's own artifact preview
+  link (claude.ai) — that environment deliberately blocks the app from
+  reaching outside servers for security reasons, so it falls back to
+  generated scenery there instead. Your GitHub Pages copy has no such
+  restriction. If your area isn't well-mapped on OpenStreetMap yet, it
+  will also fall back to generated scenery for that spot.
 - **If GPS/walking doesn't work:** this almost always means the app is
   being opened as a local file instead of through your `https://` GitHub
   Pages link. Phones only allow GPS access on a secure (https) address —
